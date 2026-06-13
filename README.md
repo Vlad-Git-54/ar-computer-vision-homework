@@ -17,3 +17,17 @@
 - `Robot Kyle Prefab Variant`
 
 Prefab и Prefab Variant находятся в папке `Assets/Prefabs`.
+
+## Домашнее задание 3
+
+В проект добавлен компонент `HomeworkFieldsAndSpawner`.
+
+В компоненте есть:
+
+- поля базовых типов
+- поле с коллекцией
+- ссылка на другой компонент `HomeworkDataTarget`
+- ссылка на Prefab
+- логика размещения Prefab после первого кадра
+
+Компоненты размещены на сцене `SampleScene`.
