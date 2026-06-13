@@ -84,3 +84,16 @@ Prefab и Prefab Variant находятся в папке `Assets/Prefabs`.
 - робот игрока `NavMesh Player Robot`, который двигается по клику мыши по проходимой области
 - префаб противника `NavMeshEnemyRobot` в папке `Assets/Prefabs`
 - робот противника `NavMesh Enemy Robot`, который через `NavMeshAgent` преследует игрока и обходит препятствия
+
+## Домашнее задание 8
+
+В проект добавлены звуковые файлы:
+
+- `BackgroundLoop.wav` для фоновой музыки
+- `CoinPickup.wav` для звука подбора монетки
+
+Оба файла находятся в папке `Assets/Resources/Audio`.
+
+На сцене `SampleScene` объект `Scene Audio Controller` запускает фоновую музыку при старте сцены и зацикливает ее.
+
+Prefab монетки `Coin` проигрывает звук `CoinPickup.wav` при подборе.
