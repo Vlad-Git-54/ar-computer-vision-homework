@@ -1,0 +1,47 @@
+# Автор: Марьяновский Владислав Андреевич
+# Группа: 292405-1
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+# Unity memory captures
+[Mm]emoryCaptures/
+Recordings/
+
+# Asset Store tools
+[Aa]ssets/AssetStoreTools*
+
+# Visual Studio and Rider
+.vs/
+.idea/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Build files
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Crash and local logs
+sysinfo.txt
+*.log
+crashlytics-build.properties
