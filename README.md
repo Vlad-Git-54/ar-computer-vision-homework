@@ -6,3 +6,14 @@
 Учебный Unity проект для домашнего задания по предмету "Дополненная реальность в компьютерном зрении".
 
 Версия Unity: 2020.3.15f2
+
+## Домашнее задание 2
+
+В проект добавлен бесплатный пакет Robot Kyle | URP из Unity Asset Store.
+
+В сцене `SampleScene` размещены:
+
+- `Robot Kyle Prefab`
+- `Robot Kyle Prefab Variant`
+
+Prefab и Prefab Variant находятся в папке `Assets/Prefabs`.
