@@ -2021,7 +2021,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 101d70c91ec9b3a418126ae071df12a3, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  backgroundMusicResourcePath: Audio/BackgroundLoop
+  backgroundMusicResourcePath: Audio/Open World Happiness Full
   backgroundVolume: 0.35
 --- !u!82 &1933628527
 AudioSource:
@@ -2033,7 +2033,7 @@ AudioSource:
   m_Enabled: 1
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
-  m_audioClip: {fileID: 8300000, guid: e57f02fb8f082a84b9c780a65503769f, type: 3}
+  m_audioClip: {fileID: 8300000, guid: 61251982336495147ad75f150f8ad8db, type: 3}
   m_PlayOnAwake: 0
   m_Volume: 0.35
   m_Pitch: 1

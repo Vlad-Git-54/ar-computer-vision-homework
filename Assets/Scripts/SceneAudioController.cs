@@ -5,7 +5,7 @@ using UnityEngine;
 [RequireComponent(typeof(AudioSource))]
 public class SceneAudioController : MonoBehaviour
 {
-    [SerializeField] private string backgroundMusicResourcePath = "Audio/BackgroundLoop";
+    [SerializeField] private string backgroundMusicResourcePath = "Audio/Open World Happiness Full";
     [SerializeField] private float backgroundVolume = 0.35f;
 
     private void Start()

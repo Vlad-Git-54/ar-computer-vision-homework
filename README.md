@@ -89,7 +89,7 @@ Prefab и Prefab Variant находятся в папке `Assets/Prefabs`.
 
 В проект добавлены звуковые файлы:
 
-- `BackgroundLoop.wav` для фоновой музыки
+- `Open World Happiness Full.wav` для фоновой музыки
 - `CoinPickup.wav` для звука подбора монетки
 
 Оба файла находятся в папке `Assets/Resources/Audio`.
