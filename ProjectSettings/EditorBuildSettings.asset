@@ -11,4 +11,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/JointShowcaseScene.unity
     guid: 598dab8cb40156b4d8de57811ba7c5dd
+  - enabled: 1
+    path: Assets/Scenes/NavMeshHomeworkScene.unity
+    guid: 53cd8ca331cad83478a4da23d1ad7568
   m_configObjects: {}

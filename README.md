@@ -72,3 +72,15 @@ Prefab и Prefab Variant находятся в папке `Assets/Prefabs`.
 - `Hinge Joint Door`: дверь на `HingeJoint`, открывается и закрывается клавишей `E`
 - `Spring Joint Oscillating Ball`: шар подвешен к неподвижной точке через `SpringJoint` и начинает колебаться при запуске
 - `Fixed Joint Wagon 1`, `Fixed Joint Wagon 2`, `Fixed Joint Wagon 3`: вагончики соединены через `FixedJoint`, первый вагончик получает силу при запуске и по клавише `F`
+
+## Домашнее задание 7
+
+В проект добавлена сцена `NavMeshHomeworkScene`.
+
+На сцене есть:
+
+- поле со стенами и коробками
+- запеченный NavMesh в `Assets/NavMesh/NavMeshHomework.asset`
+- робот игрока `NavMesh Player Robot`, который двигается по клику мыши по проходимой области
+- префаб противника `NavMeshEnemyRobot` в папке `Assets/Prefabs`
+- робот противника `NavMesh Enemy Robot`, который через `NavMeshAgent` преследует игрока и обходит препятствия
