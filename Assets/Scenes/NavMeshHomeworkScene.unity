@@ -930,7 +930,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 4351409997988696596, guid: ca381a1face58db4c82e01cdde9b3071, type: 3}
       propertyPath: target
-      value: 
+      value:
       objectReference: {fileID: 1952413366}
     - target: {fileID: 7127504019689296177, guid: ca381a1face58db4c82e01cdde9b3071, type: 3}
       propertyPath: m_Name
@@ -1371,8 +1371,24 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 844655003921451511, guid: 1131788e068efcd4f9ebeb670cb32418, type: 3}
       propertyPath: m_Materials.Array.data[0]
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 007597197bf306f4cb98b2baf17c0177, type: 2}
+    - target: {fileID: 4159929163356500660, guid: 1131788e068efcd4f9ebeb670cb32418, type: 3}
+      propertyPath: m_Controller
+      value:
+      objectReference: {fileID: 9100000, guid: 15219df6a6ccbcb459cd912d10cd7ac5, type: 2}
+    - target: {fileID: 4159929163356500660, guid: 1131788e068efcd4f9ebeb670cb32418, type: 3}
+      propertyPath: m_CullingMode
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4159929163356500660, guid: 1131788e068efcd4f9ebeb670cb32418, type: 3}
+      propertyPath: m_WarningMessage
+      value:
+      objectReference: {fileID: 0}
+    - target: {fileID: 4159929163356500660, guid: 1131788e068efcd4f9ebeb670cb32418, type: 3}
+      propertyPath: m_ApplyRootMotion
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7210533417638392436, guid: 1131788e068efcd4f9ebeb670cb32418, type: 3}
       propertyPath: m_Name
       value: NavMesh Player Robot
@@ -1443,8 +1459,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 20199f032ecaf4848af45c102c69f796, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   sceneCamera: {fileID: 0}
   sampleDistance: 2
   markerColor: {r: 0.25, g: 0.9, b: 0.35, a: 1}
@@ -1470,6 +1486,22 @@ NavMeshAgent:
   m_BaseOffset: 0
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
+--- !u!114 &1952413370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1952413367}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c795952dbd956a408a0c286abaf0b44, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  animator: {fileID: 0}
+  speedParameter: MoveSpeed
+  movingParameter: IsMoving
+  movingThreshold: 0.08
 --- !u!1 &1989280175
 GameObject:
   m_ObjectHideFlags: 0

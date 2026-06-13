@@ -97,3 +97,17 @@ Prefab и Prefab Variant находятся в папке `Assets/Prefabs`.
 На сцене `SampleScene` объект `Scene Audio Controller` запускает фоновую музыку при старте сцены и зацикливает ее.
 
 Prefab монетки `Coin` проигрывает звук `CoinPickup.wav` при подборе.
+
+## Домашнее задание 9
+
+В качестве модели персонажа используется импортированный робот `KyleRobot.fbx` из пакета `RobotKyleURP`.
+
+В папке `Assets/Animations` добавлены анимации:
+
+- `RobotIdle`
+- `RobotRun`
+- `RobotWalk`
+
+Для игрока в сцене `NavMeshHomeworkScene` настроен `PlayerRobotAnimator`. Он переключает анимации `Idle` и `Run` по параметру `IsMoving`.
+
+Для противника `NavMeshEnemyRobot` настроен `EnemyRobotAnimator`. Когда NPC преследует игрока и двигается через `NavMeshAgent`, проигрывается анимация `Walk`.
