@@ -102,11 +102,13 @@ Prefab монетки `Coin` проигрывает звук `CoinPickup.wav` п
 
 В качестве модели персонажа используется импортированный робот `KyleRobot.fbx` из пакета `RobotKyleURP`.
 
-В папке `Assets/Animations` добавлены анимации:
+В проект импортирован пакет `Human Basic Motions FREE` из Unity Asset Store.
 
-- `RobotIdle`
-- `RobotRun`
-- `RobotWalk`
+В Animator Controller используются анимации из пакета:
+
+- `HumanM@Idle01`
+- `HumanM@Run01_Forward`
+- `HumanM@Walk01_Forward`
 
 Для игрока в сцене `NavMeshHomeworkScene` настроен `PlayerRobotAnimator`. Он переключает анимации `Idle` и `Run` по параметру `IsMoving`.
 

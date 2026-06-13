@@ -246,8 +246,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 77fb17c5dab74a248a1dafd1b67c5af3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   target: {fileID: 1952413366}
   offset: {x: 0, y: 15, z: -15}
   followSpeed: 5
@@ -431,8 +431,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2290608adfe3e1a448a6cb7601dded28, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   navMeshData: {fileID: 23800000, guid: 19f4b7713218e9d458da0e232385a36c, type: 2}
 --- !u!4 &576112505
 Transform:
