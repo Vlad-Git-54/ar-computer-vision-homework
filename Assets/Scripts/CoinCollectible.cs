@@ -6,7 +6,10 @@ public class CoinCollectible : MonoBehaviour
 {
     private void OnTriggerEnter(Collider other)
     {
-        if (other.GetComponentInParent<CapsulePlayerController>() == null)
+        var capsulePlayer = other.GetComponentInParent<CapsulePlayerController>();
+        var robotPlayer = other.GetComponentInParent<RobotCoinPlayerController>();
+
+        if (capsulePlayer == null && robotPlayer == null)
         {
             return;
         }
