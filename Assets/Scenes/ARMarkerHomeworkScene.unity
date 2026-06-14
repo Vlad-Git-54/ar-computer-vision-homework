@@ -2838,7 +2838,7 @@ MonoBehaviour:
   maxSheetLuminanceDeviation: 48
   stableFramesToShow: 6
   markerLostDelay: 1.2
-  keepGameVisibleAfterTrigger: 1
+  keepGameVisibleAfterTrigger: 0
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"
   setupSceneAutomatically: 1
   gameRootPosition: {x: 0, y: 0, z: 0}

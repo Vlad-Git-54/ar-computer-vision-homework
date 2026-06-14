@@ -22,7 +22,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float maxSheetLuminanceDeviation = 48f;
     [SerializeField] private int stableFramesToShow = 6;
     [SerializeField] private float markerLostDelay = 1.2f;
-    [SerializeField] private bool keepGameVisibleAfterTrigger = true;
+    [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: белый лист А4";
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 gameRootPosition = Vector3.zero;
@@ -42,6 +42,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     private bool gameVisible;
     private bool markerWasFound;
     private bool gameTriggered;
+    private bool markerPauseActive;
+    private float timeScaleBeforeMarkerPause = 1f;
     private int stableMarkerFrames;
     private float lastMarkerFoundTime = -10f;
     private float lastDetectionErrorLogTime = -10f;
@@ -81,6 +83,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         CreateInterface();
         StartWebcam();
         SetGameVisible(false, true);
+        SetMarkerPause(true);
         UpdateStatus(false, "Поднесите белый лист А4 к веб-камере");
     }
 
@@ -109,6 +112,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         SetGameVisible(shouldShowGame, false);
+        SetMarkerPause(!shouldShowGame);
 
         if (shouldShowGame)
         {
@@ -164,8 +168,32 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
     }
 
+    private void SetMarkerPause(bool paused)
+    {
+        if (markerPauseActive == paused)
+        {
+            return;
+        }
+
+        markerPauseActive = paused;
+        if (paused)
+        {
+            if (Time.timeScale > 0f)
+            {
+                timeScaleBeforeMarkerPause = Time.timeScale;
+            }
+
+            Time.timeScale = 0f;
+            return;
+        }
+
+        Time.timeScale = Mathf.Approximately(timeScaleBeforeMarkerPause, 0f) ? 1f : timeScaleBeforeMarkerPause;
+    }
+
     private void OnDestroy()
     {
+        SetMarkerPause(false);
+
         if (webcamTexture != null)
         {
             webcamTexture.Stop();
