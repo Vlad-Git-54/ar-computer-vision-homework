@@ -2830,13 +2830,14 @@ MonoBehaviour:
   requestedFps: 30
   brightThreshold: 128
   sampleStep: 6
-  checkerColumns: 6
-  checkerRows: 4
-  checkerSearchStride: 5
-  minCheckerContrast: 42
-  minCheckerScore: 0.72
+  minCheckerCells: 4
+  maxCheckerCells: 12
+  checkerSearchStride: 8
+  minCheckerContrast: 38
+  minCheckerScore: 0.74
   minCheckerSize: 0.08
   maxCheckerSize: 0.92
+  maxCheckerAspectStretch: 1.45
   minMarkerSize: 0.1
   maxMarkerSize: 0.92
   minWhiteArea: 0.035
@@ -2847,7 +2848,7 @@ MonoBehaviour:
   stableFramesToShow: 4
   markerLostDelay: 2
   keepGameVisibleAfterTrigger: 0
-  markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0448\u0430\u0445\u043C\u0430\u0442\u043D\u0430\u044F \u0434\u043E\u0441\u043A\u0430 6 x 4 \u0438\u0437 \u0434\u0432\u0443\u0445 \u04104"
+  markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0448\u0430\u0445\u043C\u0430\u0442\u043D\u0430\u044F \u0434\u043E\u0441\u043A\u0430 \u043B\u044E\u0431\u043E\u0433\u043E \u0440\u0430\u0437\u043C\u0435\u0440\u0430"
   setupSceneAutomatically: 1
   gameRootPosition: {x: 0, y: 0, z: 0}
   gameRootRotation: {x: 0, y: 0, z: 0}
@@ -2857,4 +2858,5 @@ MonoBehaviour:
   markerGamePadding: 0.86
   minMarkerGameScale: 0.01
   maxMarkerGameScale: 1.1
-  markerPlacementSmoothness: 10
+  markerPlacementSmoothness: 6
+  markerBoundsSmoothness: 8
