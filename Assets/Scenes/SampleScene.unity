@@ -1742,7 +1742,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b26173aa7bc64a3448c84b7f49151aa3, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  moveSpeed: 4.5
+  moveSpeed: 0.9
+  fallLoseHeight: -3
   rotateSpeed: 130
   animator: {fileID: 0}
   speedParameter: MoveSpeed

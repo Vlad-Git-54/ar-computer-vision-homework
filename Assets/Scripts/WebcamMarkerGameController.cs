@@ -15,6 +15,11 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int sampleStep = 6;
     [SerializeField] private int minCheckerContrast = 42;
     [SerializeField] private float minCheckerEdgeDensity = 0.045f;
+    [SerializeField] private float minCheckerPatternScore = 0.76f;
+    [SerializeField] private float minCheckerAxisAlternation = 0.68f;
+    [SerializeField] private float minCheckerParityMatch = 0.72f;
+    [SerializeField] private int maxCheckerDarkLuminance = 125;
+    [SerializeField] private int minCheckerLightLuminance = 145;
     [SerializeField] private float minCheckerSize = 0.08f;
     [SerializeField] private float maxCheckerSize = 0.92f;
     [SerializeField] private float maxCheckerAspect = 4.2f;
@@ -113,6 +118,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         public int EdgeCount;
         public float Density;
         public float Score;
+        public float PatternScore;
     }
 
     private void Awake()
@@ -729,16 +735,19 @@ public class WebcamMarkerGameController : MonoBehaviour
             var aspect = componentWidth / (float)Mathf.Max(1, componentHeight);
             var aspectLimit = Mathf.Max(1f, maxCheckerAspect);
             var aspectOk = aspect <= aspectLimit && aspect >= 1f / aspectLimit;
+            var patternScore = CalculateCheckerPatternScore(component.MinX, component.MaxX, component.MinY, component.MaxY);
 
             if (markerSize < minCheckerSize
                 || markerSize > maxCheckerSize
                 || component.Density < minCheckerEdgeDensity
+                || patternScore < minCheckerPatternScore
                 || !aspectOk)
             {
                 continue;
             }
 
-            component.Score = frameCoverage + component.Density * 1.4f;
+            component.PatternScore = patternScore;
+            component.Score = frameCoverage + component.Density * 0.6f + patternScore * 1.8f;
             if (!bestComponent.Found || component.Score > bestComponent.Score)
             {
                 bestComponent = component;
@@ -746,6 +755,139 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         return bestComponent;
+    }
+
+    private float CalculateCheckerPatternScore(int minX, int maxX, int minY, int maxY)
+    {
+        var bestScore = 0f;
+        for (var columns = 4; columns <= 14; columns++)
+        {
+            for (var rows = 4; rows <= 10; rows++)
+            {
+                bestScore = Mathf.Max(bestScore, CalculateCheckerPatternScore(minX, maxX, minY, maxY, columns, rows));
+            }
+        }
+
+        return bestScore;
+    }
+
+    private float CalculateCheckerPatternScore(int minX, int maxX, int minY, int maxY, int columns, int rows)
+    {
+        if (columns * rows < 24)
+        {
+            return 0f;
+        }
+
+        var width = Mathf.Max(1, maxX - minX + 1);
+        var height = Mathf.Max(1, maxY - minY + 1);
+        if (width < columns || height < rows)
+        {
+            return 0f;
+        }
+
+        var values = new float[columns, rows];
+        var darkSum = 0f;
+        var lightSum = 0f;
+        var darkCount = 0;
+        var lightCount = 0;
+
+        for (var y = 0; y < rows; y++)
+        {
+            for (var x = 0; x < columns; x++)
+            {
+                var sampleX = Mathf.Clamp(minX + Mathf.FloorToInt((x + 0.5f) * width / columns), minX, maxX);
+                var sampleY = Mathf.Clamp(minY + Mathf.FloorToInt((y + 0.5f) * height / rows), minY, maxY);
+                var luminance = ReadGridLuminance(sampleX, sampleY);
+                values[x, y] = luminance;
+
+                if (((x + y) & 1) == 0)
+                {
+                    darkSum += luminance;
+                    darkCount++;
+                }
+                else
+                {
+                    lightSum += luminance;
+                    lightCount++;
+                }
+            }
+        }
+
+        var firstAverage = darkSum / Mathf.Max(1, darkCount);
+        var secondAverage = lightSum / Mathf.Max(1, lightCount);
+        var contrast = Mathf.Abs(firstAverage - secondAverage);
+        var darkerAverage = Mathf.Min(firstAverage, secondAverage);
+        var lighterAverage = Mathf.Max(firstAverage, secondAverage);
+        if (contrast < minCheckerContrast
+            || darkerAverage > maxCheckerDarkLuminance
+            || lighterAverage < minCheckerLightLuminance)
+        {
+            return 0f;
+        }
+
+        var horizontalAlternations = 0;
+        var verticalAlternations = 0;
+        var horizontalPairs = 0;
+        var verticalPairs = 0;
+        var patternMatches = 0;
+        var darkCells = 0;
+        var totalCells = Mathf.Max(1, columns * rows);
+        var threshold = (firstAverage + secondAverage) * 0.5f;
+        var evenCellsAreDark = firstAverage < secondAverage;
+        for (var y = 0; y < rows; y++)
+        {
+            for (var x = 0; x < columns; x++)
+            {
+                var shouldBeDark = (((x + y) & 1) == 0) == evenCellsAreDark;
+                var isDark = values[x, y] < threshold;
+                if (isDark)
+                {
+                    darkCells++;
+                }
+
+                if (shouldBeDark == isDark)
+                {
+                    patternMatches++;
+                }
+
+                if (x + 1 < columns)
+                {
+                    horizontalPairs++;
+                    var nextIsDark = values[x + 1, y] < threshold;
+                    if (isDark != nextIsDark && Mathf.Abs(values[x, y] - values[x + 1, y]) >= minCheckerContrast)
+                    {
+                        horizontalAlternations++;
+                    }
+                }
+
+                if (y + 1 < rows)
+                {
+                    verticalPairs++;
+                    var nextIsDark = values[x, y + 1] < threshold;
+                    if (isDark != nextIsDark && Mathf.Abs(values[x, y] - values[x, y + 1]) >= minCheckerContrast)
+                    {
+                        verticalAlternations++;
+                    }
+                }
+            }
+        }
+
+        var horizontalScore = horizontalAlternations / (float)Mathf.Max(1, horizontalPairs);
+        var verticalScore = verticalAlternations / (float)Mathf.Max(1, verticalPairs);
+        var alternationScore = (horizontalScore + verticalScore) * 0.5f;
+        var patternMatchScore = patternMatches / (float)totalCells;
+        var darkBalance = darkCells / (float)totalCells;
+        if (horizontalScore < minCheckerAxisAlternation
+            || verticalScore < minCheckerAxisAlternation
+            || patternMatchScore < minCheckerParityMatch
+            || darkBalance < 0.35f
+            || darkBalance > 0.65f)
+        {
+            return 0f;
+        }
+
+        var contrastScore = Mathf.Clamp01(contrast / 110f);
+        return alternationScore * 0.38f + patternMatchScore * 0.42f + contrastScore * 0.2f;
     }
 
     private CheckerContrastComponent ReadCheckerContrastComponent(int startIndex, int gridWidth, int gridHeight)

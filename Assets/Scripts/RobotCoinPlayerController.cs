@@ -6,7 +6,8 @@ using UnityEngine;
 [RequireComponent(typeof(CapsuleCollider))]
 public class RobotCoinPlayerController : MonoBehaviour
 {
-    [SerializeField] private float moveSpeed = 4.5f;
+    [SerializeField] private float moveSpeed = 0.9f;
+    [SerializeField] private float fallLoseHeight = -3f;
     [SerializeField] private float rotateSpeed = 130f;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
@@ -25,6 +26,7 @@ public class RobotCoinPlayerController : MonoBehaviour
     private int colorIndex;
     private float moveInput;
     private float rotateInput;
+    private bool fallLossTriggered;
 
     private void Awake()
     {
@@ -56,6 +58,7 @@ public class RobotCoinPlayerController : MonoBehaviour
         }
 
         ReadMovementInput();
+        CheckFallLoss();
         UpdateAnimation();
     }
 
@@ -104,6 +107,32 @@ public class RobotCoinPlayerController : MonoBehaviour
         var movementSpeed = Mathf.Abs(moveInput) * moveSpeed;
         animator.SetFloat(speedParameter, movementSpeed);
         animator.SetBool(movingParameter, movementSpeed > movingThreshold);
+    }
+
+    private void CheckFallLoss()
+    {
+        if (fallLossTriggered || transform.position.y > fallLoseHeight)
+        {
+            return;
+        }
+
+        fallLossTriggered = true;
+        moveInput = 0f;
+        rotateInput = 0f;
+
+        var scoreHud = ScoreHudController.Instance;
+        if (scoreHud == null)
+        {
+            scoreHud = FindObjectOfType<ScoreHudController>();
+        }
+
+        if (scoreHud != null)
+        {
+            scoreHud.EndGame();
+            return;
+        }
+
+        Debug.Log("Игрок упал за пределы карты");
     }
 
     private void ApplyColor(Color color)
