@@ -29,6 +29,9 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float markerLostDelay = 2f;
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: шахматная доска любого размера";
+    [SerializeField] private bool useFixedTabletMarkerPlacement = true;
+    [SerializeField] private Vector2 fixedTabletMarkerMin = new Vector2(0.32f, 0.36f);
+    [SerializeField] private Vector2 fixedTabletMarkerMax = new Vector2(0.77f, 0.74f);
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 gameRootPosition = Vector3.zero;
     [SerializeField] private Vector3 gameRootRotation = Vector3.zero;
@@ -180,7 +183,8 @@ public class WebcamMarkerGameController : MonoBehaviour
             markerWasFound = true;
             stableMarkerFrames++;
             lastMarkerFoundTime = Time.unscaledTime;
-            lastCheckerboardCandidate = SmoothCheckerboardMarker(markerCandidate);
+            var placementCandidate = useFixedTabletMarkerPlacement ? CreateFixedTabletMarkerCandidate() : markerCandidate;
+            lastCheckerboardCandidate = SmoothCheckerboardMarker(placementCandidate);
         }
         else if (Time.unscaledTime - lastMarkerFoundTime > markerLostDelay)
         {
@@ -232,6 +236,27 @@ public class WebcamMarkerGameController : MonoBehaviour
         smoothedCheckerboardCandidate.MinGridY = Mathf.Lerp(smoothedCheckerboardCandidate.MinGridY, markerCandidate.MinGridY, t);
         smoothedCheckerboardCandidate.MaxGridY = Mathf.Lerp(smoothedCheckerboardCandidate.MaxGridY, markerCandidate.MaxGridY, t);
         return smoothedCheckerboardCandidate;
+    }
+
+    private CheckerboardMarkerCandidate CreateFixedTabletMarkerCandidate()
+    {
+        var gridWidth = Mathf.Max(1, currentMarkerGridWidth);
+        var gridHeight = Mathf.Max(1, currentMarkerGridHeight);
+        var minX = Mathf.Clamp01(Mathf.Min(fixedTabletMarkerMin.x, fixedTabletMarkerMax.x));
+        var maxX = Mathf.Clamp01(Mathf.Max(fixedTabletMarkerMin.x, fixedTabletMarkerMax.x));
+        var minY = Mathf.Clamp01(Mathf.Min(fixedTabletMarkerMin.y, fixedTabletMarkerMax.y));
+        var maxY = Mathf.Clamp01(Mathf.Max(fixedTabletMarkerMin.y, fixedTabletMarkerMax.y));
+
+        return new CheckerboardMarkerCandidate
+        {
+            Found = true,
+            Score = 1f,
+            Contrast = minCheckerContrast,
+            MinGridX = minX * gridWidth,
+            MaxGridX = maxX * gridWidth,
+            MinGridY = minY * gridHeight,
+            MaxGridY = maxY * gridHeight
+        };
     }
 
     private void SetMarkerPause(bool paused)
