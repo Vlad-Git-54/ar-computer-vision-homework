@@ -16,7 +16,11 @@ public class MainMenuController : MonoBehaviour
         Time.timeScale = 1f;
         AudioListener.pause = false;
         CreateEventSystemIfNeeded();
-        CreateMenu();
+
+        if (FindObjectOfType<Canvas>() == null)
+        {
+            CreateMenu();
+        }
     }
 
     public void StartGame()
