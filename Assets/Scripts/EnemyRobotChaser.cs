@@ -75,14 +75,14 @@ public class EnemyRobotChaser : MonoBehaviour
             return;
         }
 
-        var currentMoveSpeed = GetCurrentMoveSpeed();
         var moveDirection = direction.normalized;
         var targetRotation = Quaternion.LookRotation(moveDirection, Vector3.up);
         enemyRigidbody.MoveRotation(Quaternion.Slerp(enemyRigidbody.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
 
-        var nextPosition = enemyRigidbody.position + moveDirection * currentMoveSpeed * Time.fixedDeltaTime;
+        var movement = CreateMovement(moveDirection, Time.fixedDeltaTime);
+        var nextPosition = enemyRigidbody.position + movement;
         enemyRigidbody.MovePosition(nextPosition);
-        SetAnimationSpeed(currentMoveSpeed);
+        SetAnimationSpeed(GetAnimationSpeed());
     }
 
     private void FindTarget()
@@ -95,14 +95,24 @@ public class EnemyRobotChaser : MonoBehaviour
         }
     }
 
-    private float GetCurrentMoveSpeed()
+    private Vector3 CreateMovement(Vector3 moveDirection, float deltaTime)
+    {
+        if (targetPlayerController == null)
+        {
+            return moveDirection * moveSpeed * deltaTime;
+        }
+
+        return targetPlayerController.CreateScaledMovement(moveDirection, playerSpeedMultiplier, deltaTime);
+    }
+
+    private float GetAnimationSpeed()
     {
         if (targetPlayerController == null)
         {
             return moveSpeed;
         }
 
-        return targetPlayerController.MoveSpeed * playerSpeedMultiplier;
+        return targetPlayerController.GetScaledAnimationSpeed(playerSpeedMultiplier);
     }
 
     private void SetAnimationSpeed(float speed)

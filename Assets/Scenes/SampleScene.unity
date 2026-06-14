@@ -212,8 +212,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 37378467}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -14, y: 1.5, z: 2}
-  m_LocalScale: {x: 0.35, y: 3, z: 24}
+  m_LocalPosition: {x: -14, y: 1.5, z: 0}
+  m_LocalScale: {x: 0.35, y: 3, z: 16}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 21
@@ -1083,7 +1083,7 @@ Transform:
   m_GameObject: {fileID: 501614672}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: -0.1, z: 0}
-  m_LocalScale: {x: 28, y: 0.2, z: 28}
+  m_LocalScale: {x: 28, y: 0.2, z: 16}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 19
@@ -1744,6 +1744,10 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   moveSpeed: 2.4
+  gameplayFloorName: Large Gameplay Floor
+  referenceGameplaySize: {x: 28, y: 28}
+  minimumGameplaySpeedScale: 0.45
+  maximumGameplaySpeedScale: 1.5
   fallLoseHeight: -3
   rotateSpeed: 130
   animator: {fileID: 0}
@@ -2311,7 +2315,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1413002354}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.5, z: 14}
+  m_LocalPosition: {x: 0, y: 1.5, z: 8}
   m_LocalScale: {x: 28, y: 3, z: 0.35}
   m_Children: []
   m_Father: {fileID: 0}
@@ -2520,8 +2524,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1876297712}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 14, y: 1.5, z: 2}
-  m_LocalScale: {x: 0.35, y: 3, z: 24}
+  m_LocalPosition: {x: 14, y: 1.5, z: 0}
+  m_LocalScale: {x: 0.35, y: 3, z: 16}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 22

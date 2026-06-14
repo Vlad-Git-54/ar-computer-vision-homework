@@ -9,10 +9,16 @@ public class CoinCollectible : MonoBehaviour
     [SerializeField] private string pickupSoundResourcePath = "Audio/CoinPickup";
     [SerializeField] private float pickupSoundVolume = 0.8f;
     [SerializeField] private float dropHeight = 0.45f;
+    [SerializeField] private string gameplayFloorName = "Large Gameplay Floor";
 
     private static readonly List<CoinCollectible> collectedCoins = new List<CoinCollectible>();
     private static AudioClip cachedPickupSound;
     private bool isCollected;
+
+    private void Start()
+    {
+        ClampInsideGameplayFloor();
+    }
 
     private void OnTriggerEnter(Collider other)
     {
@@ -83,9 +89,33 @@ public class CoinCollectible : MonoBehaviour
     {
         var angle = index * 137.5f * Mathf.Deg2Rad;
         var radius = 3.2f + index % 6 * 1.15f + totalCount * 0.03f;
-        var x = Mathf.Clamp(Mathf.Cos(angle) * radius, -10.5f, 10.5f);
-        var z = Mathf.Clamp(Mathf.Sin(angle) * radius, -10.5f, 10.5f);
+        var halfExtents = GetGameplayHalfExtents();
+        var x = Mathf.Clamp(Mathf.Cos(angle) * radius, -halfExtents.x, halfExtents.x);
+        var z = Mathf.Clamp(Mathf.Sin(angle) * radius, -halfExtents.y, halfExtents.y);
         return new Vector3(x, dropHeight, z);
+    }
+
+    private Vector2 GetGameplayHalfExtents()
+    {
+        var floorObject = GameObject.Find(gameplayFloorName);
+        if (floorObject == null)
+        {
+            return new Vector2(10.5f, 6.5f);
+        }
+
+        var floorTransform = floorObject.transform;
+        var halfWidth = Mathf.Max(1f, Mathf.Abs(floorTransform.lossyScale.x) * 0.5f - 1.2f);
+        var halfDepth = Mathf.Max(1f, Mathf.Abs(floorTransform.lossyScale.z) * 0.5f - 1.2f);
+        return new Vector2(halfWidth, halfDepth);
+    }
+
+    private void ClampInsideGameplayFloor()
+    {
+        var halfExtents = GetGameplayHalfExtents();
+        var position = transform.position;
+        position.x = Mathf.Clamp(position.x, -halfExtents.x, halfExtents.x);
+        position.z = Mathf.Clamp(position.z, -halfExtents.y, halfExtents.y);
+        transform.position = position;
     }
 
     private void AddScore()

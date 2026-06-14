@@ -49,12 +49,12 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private Vector3 gameRootRotation = Vector3.zero;
     [SerializeField] private Vector3 gameRootScale = Vector3.one;
     [SerializeField] private float fallbackGameplayWidth = 24f;
-    [SerializeField] private float fallbackGameplayDepth = 18f;
+    [SerializeField] private float fallbackGameplayDepth = 16f;
     [SerializeField] private float markerPlacementSmoothness = 2.2f;
     [SerializeField] private float markerBoundsSmoothness = 3f;
     [SerializeField] private int gameRenderLayer = 30;
-    [SerializeField] private int markerRenderTextureWidth = 1024;
-    [SerializeField] private int markerRenderTextureHeight = 768;
+    [SerializeField] private int markerRenderTextureWidth = 1280;
+    [SerializeField] private int markerRenderTextureHeight = 720;
     [SerializeField] private float markerOverlayDepth = 28f;
     [SerializeField] private float markerViewportPadding = 0.92f;
     [SerializeField] private float markerOverlayCameraPadding = 1.1f;
@@ -164,7 +164,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         StartWebcam();
         SetGameVisible(false, true);
         SetMarkerPause(true);
-        UpdateStatus(false, "Поднесите шахматную доску к веб-камере");
+        UpdateStatus(false, "Покажите шахматную доску");
     }
 
     private void Update()
@@ -201,11 +201,11 @@ public class WebcamMarkerGameController : MonoBehaviour
             PlaceGameOnMarker(lastCheckerboardCandidate, !gamePlacedOnMarker);
             gamePlacedOnMarker = true;
 
-            UpdateStatus(true, "Шахматный маркер найден, игра размещена по его границам");
+            UpdateStatus(true, "Маркер найден, игра на доске");
             return;
         }
 
-        var waitingMessage = markerWasFound ? "Маркер потерян, покажите шахматную доску снова" : "Поднесите шахматную доску к веб-камере";
+        var waitingMessage = markerWasFound ? "Маркер потерян, покажите доску снова" : "Покажите шахматную доску";
         if (!string.IsNullOrEmpty(lastDetectionHint))
         {
             waitingMessage += ". " + lastDetectionHint;
@@ -1803,7 +1803,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         canvasObject.AddComponent<GraphicRaycaster>();
 
         var panel = CreatePanel(canvasObject.transform);
-        statusText = CreateText("Marker Status", panel.transform, "Поднесите шахматную доску к веб-камере", 24, FontStyle.Bold, Color.white);
+        statusText = CreateText("Marker Status", panel.transform, "Покажите шахматную доску", 22, FontStyle.Bold, Color.white);
         SetStretch(statusText.rectTransform, new Vector2(22f, 38f), new Vector2(22f, 12f));
 
         helpText = CreateText("Marker Help", panel.transform, markerHelpText, 18, FontStyle.Normal, new Color(0.82f, 0.9f, 1f, 1f));
@@ -1819,7 +1819,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 0f);
         rect.anchorMax = new Vector2(0.5f, 0f);
         rect.pivot = new Vector2(0.5f, 0f);
-        rect.sizeDelta = new Vector2(720f, 94f);
+        rect.sizeDelta = new Vector2(920f, 94f);
         rect.anchoredPosition = new Vector2(0f, 26f);
 
         var image = panelObject.AddComponent<Image>();
@@ -1840,6 +1840,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         label.fontStyle = style;
         label.alignment = TextAnchor.MiddleLeft;
         label.color = color;
+        label.horizontalOverflow = HorizontalWrapMode.Wrap;
+        label.verticalOverflow = VerticalWrapMode.Truncate;
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = 14;
+        label.resizeTextMaxSize = fontSize;
         label.raycastTarget = false;
         return label;
     }
