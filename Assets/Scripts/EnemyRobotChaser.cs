@@ -9,7 +9,7 @@ public class EnemyRobotChaser : MonoBehaviour
     [SerializeField] private string targetObjectName = "Robot Player";
     [SerializeField] private float moveSpeed = 3.25f;
     [SerializeField] private float rotationSpeed = 9f;
-    [SerializeField] private float stopDistance = 1.05f;
+    [SerializeField] private float stopDistance = 0.08f;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
     [SerializeField] private string movingParameter = "IsMoving";
