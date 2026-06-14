@@ -2827,21 +2827,21 @@ MonoBehaviour:
   requestedWidth: 640
   requestedHeight: 480
   requestedFps: 30
-  brightThreshold: 158
+  brightThreshold: 140
   sampleStep: 4
-  minMarkerSize: 0.18
-  maxMarkerSize: 0.82
-  minMarkerDensity: 0.66
-  maxDarkMarkerDensity: 0.08
+  minMarkerSize: 0.12
+  maxMarkerSize: 0.9
+  minMarkerDensity: 0.42
+  maxDarkMarkerDensity: 0.18
   markerDistanceFromCamera: 7.2
   gameScaleAtMarker: 0.055
   gameplayWorldSize: 28
   paperCoverage: 0.72
   minGameScale: 0.006
   maxGameScale: 0.07
-  maxSurroundingBrightDensity: 0.22
-  minBorderContrast: 32
-  minCornerFill: 0.58
+  maxSurroundingBrightDensity: 0.42
+  minBorderContrast: 14
+  minCornerFill: 0.34
   markerPlaneLift: 0.04
   followSharpness: 8
   markerLostDelay: 1.25

@@ -11,21 +11,21 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 480;
     [SerializeField] private int requestedFps = 30;
-    [SerializeField] private int brightThreshold = 158;
+    [SerializeField] private int brightThreshold = 140;
     [SerializeField] private int sampleStep = 4;
-    [SerializeField] private float minMarkerSize = 0.18f;
-    [SerializeField] private float maxMarkerSize = 0.95f;
-    [SerializeField] private float minMarkerDensity = 0.4f;
-    [SerializeField] private float maxDarkMarkerDensity = 0.2f;
+    [SerializeField] private float minMarkerSize = 0.12f;
+    [SerializeField] private float maxMarkerSize = 0.9f;
+    [SerializeField] private float minMarkerDensity = 0.42f;
+    [SerializeField] private float maxDarkMarkerDensity = 0.18f;
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
     [SerializeField] private float gameScaleAtMarker = 0.055f;
     [SerializeField] private float gameplayWorldSize = 28f;
-    [SerializeField] private float paperCoverage = 0.64f;
-    [SerializeField] private float minGameScale = 0.018f;
-    [SerializeField] private float maxGameScale = 0.06f;
-    [SerializeField] private float maxSurroundingBrightDensity = 0.34f;
-    [SerializeField] private float minBorderContrast = 32f;
-    [SerializeField] private float minCornerFill = 0.58f;
+    [SerializeField] private float paperCoverage = 0.72f;
+    [SerializeField] private float minGameScale = 0.006f;
+    [SerializeField] private float maxGameScale = 0.07f;
+    [SerializeField] private float maxSurroundingBrightDensity = 0.42f;
+    [SerializeField] private float minBorderContrast = 14f;
+    [SerializeField] private float minCornerFill = 0.34f;
     [SerializeField] private float markerPlaneLift = 0.04f;
     [SerializeField] private float followSharpness = 8f;
     [SerializeField] private float markerLostDelay = 1.25f;
@@ -53,6 +53,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private MarkerObservation lastStableMarker;
     private float lastMarkerFoundTime = -10f;
     private float lastDetectionErrorLogTime = -10f;
+    private string lastDetectionHint = "";
     private Sprite whiteSprite;
 
     private struct MarkerObservation
@@ -134,7 +135,13 @@ public class WebcamMarkerGameController : MonoBehaviour
             return;
         }
 
-        UpdateStatus(false, markerWasFound ? "Лист потерян, покажите его камере снова" : "Поднесите белый лист А4 к веб-камере");
+        var waitingMessage = markerWasFound ? "Лист потерян, покажите его камере снова" : "Поднесите белый лист А4 к веб-камере";
+        if (!string.IsNullOrEmpty(lastDetectionHint))
+        {
+            waitingMessage += ". " + lastDetectionHint;
+        }
+
+        UpdateStatus(false, waitingMessage);
     }
 
     private MarkerObservation DetectMarkerSafely()
@@ -376,13 +383,14 @@ public class WebcamMarkerGameController : MonoBehaviour
         Array.Clear(darkMarkerCells, 0, gridLength);
         Array.Clear(luminanceMarkerCells, 0, gridLength);
         Array.Clear(visitedMarkerCells, 0, gridLength);
+        lastDetectionHint = "";
     }
 
     private bool IsBrightMarkerPixel(Color32 color, int luminance)
     {
         var maxChannel = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
         var minChannel = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
-        return luminance >= brightThreshold && minChannel >= 112 && maxChannel - minChannel <= 68;
+        return luminance >= brightThreshold && minChannel >= 92 && maxChannel - minChannel <= 104;
     }
 
     private Color32 ReadAverageCellColor(int startX, int startY, int imageWidth, int imageHeight)
@@ -466,6 +474,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         var bestObservation = new MarkerObservation();
         var bestScore = 0f;
+        var componentCount = 0;
+        var shapeCandidateCount = 0;
 
         for (var startIndex = 0; startIndex < brightMarkerCells.Length; startIndex++)
         {
@@ -475,6 +485,7 @@ public class WebcamMarkerGameController : MonoBehaviour
             }
 
             var component = ReadBrightComponent(startIndex, gridWidth, gridHeight);
+            componentCount++;
             if (!component.Found)
             {
                 continue;
@@ -486,11 +497,14 @@ public class WebcamMarkerGameController : MonoBehaviour
                 continue;
             }
 
+            shapeCandidateCount++;
+
             var componentWidth = component.MaxX - component.MinX + 1;
             var componentHeight = component.MaxY - component.MinY + 1;
             var aspect = componentWidth / (float)Mathf.Max(1, componentHeight);
             var aspectBonus = GetA4AspectScore(aspect);
-            var score = component.BrightCount * component.BrightDensity * (1f + aspectBonus);
+            var borderBonus = Mathf.Clamp01(component.BorderContrast / Mathf.Max(1f, minBorderContrast));
+            var score = component.BrightCount * component.BrightDensity * (1f + aspectBonus + borderBonus);
             if (score <= bestScore)
             {
                 continue;
@@ -498,6 +512,15 @@ public class WebcamMarkerGameController : MonoBehaviour
 
             bestScore = score;
             bestObservation = marker;
+        }
+
+        if (!bestObservation.Found)
+        {
+            lastDetectionHint = componentCount == 0
+                ? "Белая область пока не найдена"
+                : shapeCandidateCount == 0
+                    ? "Белая область есть, но она не похожа на лист А4"
+                    : "";
         }
 
         return bestObservation;
@@ -547,11 +570,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         var borderContrast = innerLuminance - ringLuminance;
         var cornerFill = CountCornerBrightFill(minX, maxX, minY, maxY, gridWidth) / (float)Mathf.Max(1, CountCornerCells(minX, maxX, minY, maxY));
 
-        result.Found = brightCount >= 110
+        result.Found = brightCount >= 80
             && brightDensity >= minMarkerDensity
             && darkDensity <= maxDarkMarkerDensity
-            && surroundingBrightDensity <= maxSurroundingBrightDensity
-            && borderContrast >= minBorderContrast
+            && (surroundingBrightDensity <= maxSurroundingBrightDensity || borderContrast >= minBorderContrast)
+            && borderContrast >= minBorderContrast * 0.5f
             && cornerFill >= minCornerFill;
         result.MinX = minX;
         result.MaxX = maxX;
@@ -724,7 +747,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var markerWidth = width * sampleStep;
         var markerHeight = height * sampleStep;
         var markerSize = Mathf.Max(markerWidth / (float)imageWidth, markerHeight / (float)imageHeight);
-        var edgeMargin = 4;
+        var edgeMargin = 1;
 
         if (component.MinX <= edgeMargin
             || component.MinY <= edgeMargin
@@ -750,15 +773,15 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        return Mathf.Abs(aspect - landscapeA4) <= 0.18f || Mathf.Abs(aspect - portraitA4) <= 0.11f;
+        return Mathf.Abs(aspect - landscapeA4) <= 0.34f || Mathf.Abs(aspect - portraitA4) <= 0.22f;
     }
 
     private float GetA4AspectScore(float aspect)
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.18f;
-        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.11f;
+        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.34f;
+        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.22f;
         return Mathf.Clamp01(Mathf.Max(landscapeScore, portraitScore));
     }
 
