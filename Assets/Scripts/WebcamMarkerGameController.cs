@@ -20,6 +20,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
     [SerializeField] private float gameScaleAtMarker = 0.055f;
     [SerializeField] private float gameplayWorldSize = 28f;
+    [SerializeField] private float gameplayWorldWidth = 28f;
+    [SerializeField] private float gameplayWorldDepth = 28f;
     [SerializeField] private float paperCoverage = 0.72f;
     [SerializeField] private float minGameScale = 0.006f;
     [SerializeField] private float maxGameScale = 0.07f;
@@ -33,6 +35,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private bool placeGameOnCameraFacingPaper = true;
     [SerializeField] private bool freezePhysicsInMarkerMode = true;
+    [SerializeField] private bool fitGameplayToPaperAspect = true;
     [SerializeField] private Vector3 arCameraPosition = new Vector3(0f, 2.8f, -2.5f);
     [SerializeField] private Vector3 arCameraRotation = new Vector3(14f, 0f, 0f);
 
@@ -800,19 +803,31 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         gameRoot.position = Vector3.Lerp(gameRoot.position, targetPosition, blend);
         gameRoot.rotation = Quaternion.Slerp(gameRoot.rotation, targetRotation, blend);
-        gameRoot.localScale = Vector3.Lerp(gameRoot.localScale, Vector3.one * targetScale, blend);
+        gameRoot.localScale = Vector3.Lerp(gameRoot.localScale, targetScale, blend);
     }
 
-    private float CalculateGameScale(MarkerObservation marker)
+    private Vector3 CalculateGameScale(MarkerObservation marker)
     {
         var viewportWorldHeight = 2f * markerDistanceFromCamera * Mathf.Tan(sceneCamera.fieldOfView * Mathf.Deg2Rad * 0.5f);
         var viewportWorldWidth = viewportWorldHeight * sceneCamera.aspect;
         var markerWorldWidth = Mathf.Max(0.01f, marker.ViewportWidth * viewportWorldWidth);
         var markerWorldHeight = Mathf.Max(0.01f, marker.ViewportHeight * viewportWorldHeight);
-        var markerWorldSize = Mathf.Min(markerWorldWidth, markerWorldHeight);
-        var calculatedScale = markerWorldSize * paperCoverage / Mathf.Max(0.01f, gameplayWorldSize);
+        var sourceWidth = gameplayWorldWidth > 0.01f ? gameplayWorldWidth : gameplayWorldSize;
+        var sourceDepth = gameplayWorldDepth > 0.01f ? gameplayWorldDepth : gameplayWorldSize;
+        var scaleX = markerWorldWidth * paperCoverage / Mathf.Max(0.01f, sourceWidth);
+        var scaleZ = markerWorldHeight * paperCoverage / Mathf.Max(0.01f, sourceDepth);
 
-        return Mathf.Clamp(calculatedScale, minGameScale, maxGameScale);
+        scaleX = Mathf.Clamp(scaleX, minGameScale, maxGameScale);
+        scaleZ = Mathf.Clamp(scaleZ, minGameScale, maxGameScale);
+
+        if (!fitGameplayToPaperAspect)
+        {
+            var uniformScale = Mathf.Min(scaleX, scaleZ);
+            return Vector3.one * uniformScale;
+        }
+
+        var heightScale = Mathf.Min(scaleX, scaleZ);
+        return new Vector3(scaleX, heightScale, scaleZ);
     }
 
     private void SetGameVisible(bool visible, bool force)

@@ -2836,6 +2836,8 @@ MonoBehaviour:
   markerDistanceFromCamera: 7.2
   gameScaleAtMarker: 0.055
   gameplayWorldSize: 28
+  gameplayWorldWidth: 28
+  gameplayWorldDepth: 28
   paperCoverage: 0.72
   minGameScale: 0.006
   maxGameScale: 0.07
@@ -2849,5 +2851,6 @@ MonoBehaviour:
   setupSceneAutomatically: 1
   placeGameOnCameraFacingPaper: 1
   freezePhysicsInMarkerMode: 1
+  fitGameplayToPaperAspect: 1
   arCameraPosition: {x: 0, y: 2.8, z: -2.5}
   arCameraRotation: {x: 14, y: 0, z: 0}
