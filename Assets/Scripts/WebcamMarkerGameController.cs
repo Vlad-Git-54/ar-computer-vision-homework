@@ -52,6 +52,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private bool markerWasFound;
     private MarkerObservation lastStableMarker;
     private float lastMarkerFoundTime = -10f;
+    private float lastDetectionErrorLogTime = -10f;
     private Sprite whiteSprite;
 
     private struct MarkerObservation
@@ -111,7 +112,7 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         UpdateBackgroundScale();
 
-        var marker = DetectMarker();
+        var marker = DetectMarkerSafely();
         if (marker.Found)
         {
             lastMarkerFoundTime = Time.unscaledTime;
@@ -134,6 +135,24 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         UpdateStatus(false, markerWasFound ? "Лист потерян, покажите его камере снова" : "Поднесите белый лист А4 к веб-камере");
+    }
+
+    private MarkerObservation DetectMarkerSafely()
+    {
+        try
+        {
+            return DetectMarker();
+        }
+        catch (Exception exception)
+        {
+            if (Time.unscaledTime - lastDetectionErrorLogTime > 1f)
+            {
+                lastDetectionErrorLogTime = Time.unscaledTime;
+                Debug.LogWarning("Кадр камеры пропущен из-за ошибки распознавания листа: " + exception.Message);
+            }
+
+            return new MarkerObservation();
+        }
     }
 
     private void OnDestroy()
@@ -560,32 +579,12 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private int CountDarkCells(int minX, int maxX, int minY, int maxY, int gridWidth)
     {
-        var count = 0;
-        for (var y = minY; y <= maxY; y++)
-        {
-            var rowStart = y * gridWidth;
-            for (var x = minX; x <= maxX; x++)
-            {
-                count += darkMarkerCells[rowStart + x];
-            }
-        }
-
-        return count;
+        return CountCells(darkMarkerCells, minX, maxX, minY, maxY, gridWidth);
     }
 
     private int CountLuminanceCells(int minX, int maxX, int minY, int maxY, int gridWidth)
     {
-        var count = 0;
-        for (var y = minY; y <= maxY; y++)
-        {
-            var rowStart = y * gridWidth;
-            for (var x = minX; x <= maxX; x++)
-            {
-                count += luminanceMarkerCells[rowStart + x];
-            }
-        }
-
-        return count;
+        return CountCells(luminanceMarkerCells, minX, maxX, minY, maxY, gridWidth);
     }
 
     private int CountBrightCellsAround(int minX, int maxX, int minY, int maxY, int gridWidth, int gridHeight)
@@ -606,7 +605,11 @@ public class WebcamMarkerGameController : MonoBehaviour
                     continue;
                 }
 
-                count += brightMarkerCells[rowStart + x];
+                var index = rowStart + x;
+                if (index >= 0 && index < brightMarkerCells.Length)
+                {
+                    count += brightMarkerCells[index];
+                }
             }
         }
 
@@ -631,7 +634,11 @@ public class WebcamMarkerGameController : MonoBehaviour
                     continue;
                 }
 
-                count += luminanceMarkerCells[rowStart + x];
+                var index = rowStart + x;
+                if (index >= 0 && index < luminanceMarkerCells.Length)
+                {
+                    count += luminanceMarkerCells[index];
+                }
             }
         }
 
@@ -674,13 +681,33 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private int CountBrightCells(int minX, int maxX, int minY, int maxY, int gridWidth)
     {
+        return CountCells(brightMarkerCells, minX, maxX, minY, maxY, gridWidth);
+    }
+
+    private int CountCells(byte[] cells, int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        if (cells == null || cells.Length == 0 || gridWidth <= 0)
+        {
+            return 0;
+        }
+
+        var gridHeight = Mathf.Max(1, cells.Length / gridWidth);
+        var safeMinX = Mathf.Clamp(Mathf.Min(minX, maxX), 0, gridWidth - 1);
+        var safeMaxX = Mathf.Clamp(Mathf.Max(minX, maxX), 0, gridWidth - 1);
+        var safeMinY = Mathf.Clamp(Mathf.Min(minY, maxY), 0, gridHeight - 1);
+        var safeMaxY = Mathf.Clamp(Mathf.Max(minY, maxY), 0, gridHeight - 1);
         var count = 0;
-        for (var y = minY; y <= maxY; y++)
+
+        for (var y = safeMinY; y <= safeMaxY; y++)
         {
             var rowStart = y * gridWidth;
-            for (var x = minX; x <= maxX; x++)
+            for (var x = safeMinX; x <= safeMaxX; x++)
             {
-                count += brightMarkerCells[rowStart + x];
+                var index = rowStart + x;
+                if (index >= 0 && index < cells.Length)
+                {
+                    count += cells[index];
+                }
             }
         }
 
