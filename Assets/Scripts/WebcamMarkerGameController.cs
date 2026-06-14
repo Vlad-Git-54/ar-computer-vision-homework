@@ -15,9 +15,12 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int sampleStep = 6;
     [SerializeField] private float minMarkerSize = 0.1f;
     [SerializeField] private float maxMarkerSize = 0.92f;
-    [SerializeField] private float minWhiteArea = 0.025f;
-    [SerializeField] private float minMarkerDensity = 0.32f;
-    [SerializeField] private int stableFramesToShow = 3;
+    [SerializeField] private float minWhiteArea = 0.04f;
+    [SerializeField] private float minMarkerDensity = 0.56f;
+    [SerializeField] private float minCenterFill = 0.5f;
+    [SerializeField] private float minCornerFill = 0.34f;
+    [SerializeField] private float maxSheetLuminanceDeviation = 48f;
+    [SerializeField] private int stableFramesToShow = 6;
     [SerializeField] private float markerLostDelay = 1.2f;
     [SerializeField] private bool keepGameVisibleAfterTrigger = true;
     [SerializeField] private string markerHelpText = "Маркер: белый лист А4";
@@ -29,6 +32,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private WebCamTexture webcamTexture;
     private Color32[] cameraPixels;
     private byte[] whiteCells;
+    private byte[] luminanceCells;
     private byte[] visitedCells;
     private int[] componentQueue;
     private GameObject backgroundObject;
@@ -53,6 +57,9 @@ public class WebcamMarkerGameController : MonoBehaviour
         public int MaxY;
         public int WhiteCount;
         public float Density;
+        public float CenterFill;
+        public float CornerFill;
+        public float LuminanceDeviation;
     }
 
     private void Awake()
@@ -328,6 +335,7 @@ public class WebcamMarkerGameController : MonoBehaviour
                 var color = ReadAverageCellColor(x, y, width, height);
                 var luminance = (color.r * 30 + color.g * 59 + color.b * 11) / 100;
                 var cellIndex = gridY * gridWidth + gridX;
+                luminanceCells[cellIndex] = (byte)Mathf.Clamp(luminance, 0, 255);
 
                 if (IsWhiteSheetPixel(color, luminance))
                 {
@@ -350,12 +358,14 @@ public class WebcamMarkerGameController : MonoBehaviour
         if (whiteCells == null || whiteCells.Length != gridLength)
         {
             whiteCells = new byte[gridLength];
+            luminanceCells = new byte[gridLength];
             visitedCells = new byte[gridLength];
             componentQueue = new int[gridLength];
             return;
         }
 
         Array.Clear(whiteCells, 0, gridLength);
+        Array.Clear(luminanceCells, 0, gridLength);
         Array.Clear(visitedCells, 0, gridLength);
     }
 
@@ -363,7 +373,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         var maxChannel = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
         var minChannel = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
-        return luminance >= brightThreshold && minChannel >= 82 && maxChannel - minChannel <= 120;
+        return luminance >= brightThreshold && minChannel >= 92 && maxChannel - minChannel <= 82;
     }
 
     private Color32 ReadAverageCellColor(int startX, int startY, int imageWidth, int imageHeight)
@@ -421,12 +431,16 @@ public class WebcamMarkerGameController : MonoBehaviour
                 || markerSize > maxMarkerSize
                 || whiteArea < minWhiteArea
                 || component.Density < minMarkerDensity
+                || component.CenterFill < minCenterFill
+                || component.CornerFill < minCornerFill
+                || component.LuminanceDeviation > maxSheetLuminanceDeviation
                 || aspectScore <= 0f)
             {
                 continue;
             }
 
-            var score = component.WhiteCount * component.Density * (1f + aspectScore);
+            var plainnessScore = 1f - Mathf.Clamp01(component.LuminanceDeviation / Mathf.Max(1f, maxSheetLuminanceDeviation));
+            var score = component.WhiteCount * component.Density * (1f + aspectScore + plainnessScore);
             bestScore = Mathf.Max(bestScore, score);
         }
 
@@ -468,6 +482,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var componentWidth = maxX - minX + 1;
         var componentHeight = maxY - minY + 1;
         var area = Mathf.Max(1, componentWidth * componentHeight);
+        var averageLuminance = CountLuminanceCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
 
         result.Found = whiteCount >= 60;
         result.MinX = minX;
@@ -476,6 +491,9 @@ public class WebcamMarkerGameController : MonoBehaviour
         result.MaxY = maxY;
         result.WhiteCount = whiteCount;
         result.Density = whiteCount / (float)area;
+        result.CenterFill = CalculateCenterFill(minX, maxX, minY, maxY, gridWidth);
+        result.CornerFill = CalculateCornerFill(minX, maxX, minY, maxY, gridWidth);
+        result.LuminanceDeviation = CountLuminanceDeviation(minX, maxX, minY, maxY, gridWidth, averageLuminance) / (float)area;
         return result;
     }
 
@@ -488,6 +506,106 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         visitedCells[index] = 1;
         componentQueue[tail++] = index;
+    }
+
+    private float CalculateCenterFill(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        var width = maxX - minX + 1;
+        var height = maxY - minY + 1;
+        var insetX = Mathf.Max(1, Mathf.RoundToInt(width * 0.22f));
+        var insetY = Mathf.Max(1, Mathf.RoundToInt(height * 0.22f));
+        var centerMinX = Mathf.Min(maxX, minX + insetX);
+        var centerMaxX = Mathf.Max(minX, maxX - insetX);
+        var centerMinY = Mathf.Min(maxY, minY + insetY);
+        var centerMaxY = Mathf.Max(minY, maxY - insetY);
+        var area = Mathf.Max(1, (centerMaxX - centerMinX + 1) * (centerMaxY - centerMinY + 1));
+
+        return CountWhiteCells(centerMinX, centerMaxX, centerMinY, centerMaxY, gridWidth) / (float)area;
+    }
+
+    private float CalculateCornerFill(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        var width = maxX - minX + 1;
+        var height = maxY - minY + 1;
+        var cornerWidth = Mathf.Max(2, Mathf.RoundToInt(width * 0.2f));
+        var cornerHeight = Mathf.Max(2, Mathf.RoundToInt(height * 0.2f));
+        var whiteCount = CountWhiteCells(minX, minX + cornerWidth - 1, minY, minY + cornerHeight - 1, gridWidth)
+            + CountWhiteCells(maxX - cornerWidth + 1, maxX, minY, minY + cornerHeight - 1, gridWidth)
+            + CountWhiteCells(minX, minX + cornerWidth - 1, maxY - cornerHeight + 1, maxY, gridWidth)
+            + CountWhiteCells(maxX - cornerWidth + 1, maxX, maxY - cornerHeight + 1, maxY, gridWidth);
+        var area = Mathf.Max(1, cornerWidth * cornerHeight * 4);
+
+        return whiteCount / (float)area;
+    }
+
+    private int CountWhiteCells(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        return CountCells(whiteCells, minX, maxX, minY, maxY, gridWidth);
+    }
+
+    private int CountLuminanceCells(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        return CountCells(luminanceCells, minX, maxX, minY, maxY, gridWidth);
+    }
+
+    private float CountLuminanceDeviation(int minX, int maxX, int minY, int maxY, int gridWidth, float averageLuminance)
+    {
+        if (luminanceCells == null || luminanceCells.Length == 0 || gridWidth <= 0)
+        {
+            return 0f;
+        }
+
+        var gridHeight = Mathf.Max(1, luminanceCells.Length / gridWidth);
+        var safeMinX = Mathf.Clamp(Mathf.Min(minX, maxX), 0, gridWidth - 1);
+        var safeMaxX = Mathf.Clamp(Mathf.Max(minX, maxX), 0, gridWidth - 1);
+        var safeMinY = Mathf.Clamp(Mathf.Min(minY, maxY), 0, gridHeight - 1);
+        var safeMaxY = Mathf.Clamp(Mathf.Max(minY, maxY), 0, gridHeight - 1);
+        var deviation = 0f;
+
+        for (var y = safeMinY; y <= safeMaxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = safeMinX; x <= safeMaxX; x++)
+            {
+                var index = rowStart + x;
+                if (index >= 0 && index < luminanceCells.Length)
+                {
+                    deviation += Mathf.Abs(luminanceCells[index] - averageLuminance);
+                }
+            }
+        }
+
+        return deviation;
+    }
+
+    private int CountCells(byte[] cells, int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        if (cells == null || cells.Length == 0 || gridWidth <= 0)
+        {
+            return 0;
+        }
+
+        var gridHeight = Mathf.Max(1, cells.Length / gridWidth);
+        var safeMinX = Mathf.Clamp(Mathf.Min(minX, maxX), 0, gridWidth - 1);
+        var safeMaxX = Mathf.Clamp(Mathf.Max(minX, maxX), 0, gridWidth - 1);
+        var safeMinY = Mathf.Clamp(Mathf.Min(minY, maxY), 0, gridHeight - 1);
+        var safeMaxY = Mathf.Clamp(Mathf.Max(minY, maxY), 0, gridHeight - 1);
+        var count = 0;
+
+        for (var y = safeMinY; y <= safeMaxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = safeMinX; x <= safeMaxX; x++)
+            {
+                var index = rowStart + x;
+                if (index >= 0 && index < cells.Length)
+                {
+                    count += cells[index];
+                }
+            }
+        }
+
+        return count;
     }
 
     private float GetA4AspectScore(float aspect)
@@ -527,9 +645,18 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             currentRigidbody.velocity = Vector3.zero;
             currentRigidbody.angularVelocity = Vector3.zero;
-            currentRigidbody.isKinematic = !visible;
-            currentRigidbody.useGravity = visible;
-            currentRigidbody.collisionDetectionMode = visible ? CollisionDetectionMode.Continuous : CollisionDetectionMode.Discrete;
+            if (visible)
+            {
+                currentRigidbody.isKinematic = false;
+                currentRigidbody.useGravity = true;
+                currentRigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            }
+            else
+            {
+                currentRigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                currentRigidbody.useGravity = false;
+                currentRigidbody.isKinematic = true;
+            }
         }
 
         SetRuntimeGameCanvasVisible("Homework 10 HUD Canvas", visible);

@@ -2831,9 +2831,12 @@ MonoBehaviour:
   sampleStep: 6
   minMarkerSize: 0.1
   maxMarkerSize: 0.92
-  minWhiteArea: 0.025
-  minMarkerDensity: 0.32
-  stableFramesToShow: 3
+  minWhiteArea: 0.04
+  minMarkerDensity: 0.56
+  minCenterFill: 0.5
+  minCornerFill: 0.34
+  maxSheetLuminanceDeviation: 48
+  stableFramesToShow: 6
   markerLostDelay: 1.2
   keepGameVisibleAfterTrigger: 1
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"
