@@ -2834,15 +2834,15 @@ MonoBehaviour:
   sampleStep: 6
   minCheckerContrast: 42
   minCheckerEdgeDensity: 0.045
-  minCheckerPatternScore: 0.76
+  minCheckerPatternScore: 0.48
   minCheckerAxisAlternation: 0.68
   minCheckerParityMatch: 0.72
   maxCheckerDarkLuminance: 125
   minCheckerLightLuminance: 145
-  minCheckerSize: 0.08
-  maxCheckerSize: 0.92
+  minCheckerSize: 0.06
+  maxCheckerSize: 0.98
   maxCheckerAspect: 4.2
-  detectedTabletContourPadding: {x: 0.32, y: 0.24}
+  detectedTabletContourPadding: {x: 0.04, y: 0.04}
   minMarkerSize: 0.1
   maxMarkerSize: 0.92
   minWhiteArea: 0.035
@@ -2850,7 +2850,7 @@ MonoBehaviour:
   minCenterFill: 0.44
   minCornerFill: 0.28
   maxSheetLuminanceDeviation: 60
-  stableFramesToShow: 4
+  stableFramesToShow: 2
   markerLostDelay: 2
   keepGameVisibleAfterTrigger: 0
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0448\u0430\u0445\u043C\u0430\u0442\u043D\u0430\u044F \u0434\u043E\u0441\u043A\u0430 \u043B\u044E\u0431\u043E\u0433\u043E \u0440\u0430\u0437\u043C\u0435\u0440\u0430"
@@ -2867,8 +2867,9 @@ MonoBehaviour:
   gameRootScale: {x: 1, y: 1, z: 1}
   fallbackGameplayWidth: 24
   fallbackGameplayDepth: 18
-  markerGamePadding: 0.98
-  minMarkerGameScale: 0.08
-  maxMarkerGameScale: 1.1
   markerPlacementSmoothness: 6
   markerBoundsSmoothness: 8
+  gameRenderLayer: 30
+  markerViewportPadding: 0.92
+  markerOverlayCameraPadding: 1.1
+  markerOverlayCameraRotation: {x: 90, y: 0, z: 0}

@@ -15,15 +15,15 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int sampleStep = 6;
     [SerializeField] private int minCheckerContrast = 42;
     [SerializeField] private float minCheckerEdgeDensity = 0.045f;
-    [SerializeField] private float minCheckerPatternScore = 0.76f;
+    [SerializeField] private float minCheckerPatternScore = 0.48f;
     [SerializeField] private float minCheckerAxisAlternation = 0.68f;
     [SerializeField] private float minCheckerParityMatch = 0.72f;
     [SerializeField] private int maxCheckerDarkLuminance = 125;
     [SerializeField] private int minCheckerLightLuminance = 145;
-    [SerializeField] private float minCheckerSize = 0.08f;
-    [SerializeField] private float maxCheckerSize = 0.92f;
+    [SerializeField] private float minCheckerSize = 0.06f;
+    [SerializeField] private float maxCheckerSize = 0.98f;
     [SerializeField] private float maxCheckerAspect = 4.2f;
-    [SerializeField] private Vector2 detectedTabletContourPadding = new Vector2(0.32f, 0.24f);
+    [SerializeField] private Vector2 detectedTabletContourPadding = new Vector2(0.04f, 0.04f);
     [SerializeField] private float minMarkerSize = 0.1f;
     [SerializeField] private float maxMarkerSize = 0.92f;
     [SerializeField] private float minWhiteArea = 0.035f;
@@ -48,11 +48,12 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private Vector3 gameRootScale = Vector3.one;
     [SerializeField] private float fallbackGameplayWidth = 24f;
     [SerializeField] private float fallbackGameplayDepth = 18f;
-    [SerializeField] private float markerGamePadding = 0.98f;
-    [SerializeField] private float minMarkerGameScale = 0.08f;
-    [SerializeField] private float maxMarkerGameScale = 1.1f;
     [SerializeField] private float markerPlacementSmoothness = 6f;
     [SerializeField] private float markerBoundsSmoothness = 8f;
+    [SerializeField] private int gameRenderLayer = 30;
+    [SerializeField] private float markerViewportPadding = 0.92f;
+    [SerializeField] private float markerOverlayCameraPadding = 1.1f;
+    [SerializeField] private Vector3 markerOverlayCameraRotation = new Vector3(90f, 0f, 0f);
 
     private WebCamTexture webcamTexture;
     private Color32[] cameraPixels;
@@ -62,6 +63,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private int[] componentQueue;
     private GameObject backgroundObject;
     private Material backgroundMaterial;
+    private Camera markerGameCamera;
     private Text statusText;
     private Text helpText;
     private bool gameVisible;
@@ -132,6 +134,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             CreateGameRootFromSceneIfNeeded();
             AlignSceneCameraWithWebcam();
+            SetupMarkerGameCamera();
             PlaceGameNormally();
         }
     }
@@ -385,6 +388,42 @@ public class WebcamMarkerGameController : MonoBehaviour
         gameRoot.localScale = gameRootScale;
     }
 
+    private void SetupMarkerGameCamera()
+    {
+        if (sceneCamera == null || gameRoot == null)
+        {
+            return;
+        }
+
+        AssignLayerRecursively(gameRoot.gameObject, gameRenderLayer);
+        sceneCamera.cullingMask &= ~(1 << gameRenderLayer);
+
+        var cameraObject = new GameObject("AR Marker Game Camera");
+        markerGameCamera = cameraObject.AddComponent<Camera>();
+        markerGameCamera.enabled = false;
+        markerGameCamera.clearFlags = CameraClearFlags.Depth;
+        markerGameCamera.cullingMask = 1 << gameRenderLayer;
+        markerGameCamera.depth = sceneCamera.depth + 1f;
+        markerGameCamera.orthographic = true;
+        markerGameCamera.nearClipPlane = 0.1f;
+        markerGameCamera.farClipPlane = 100f;
+        UpdateMarkerGameCameraView(new Rect(0f, 0f, 1f, 1f), true);
+    }
+
+    private void AssignLayerRecursively(GameObject currentObject, int layer)
+    {
+        if (currentObject == null)
+        {
+            return;
+        }
+
+        currentObject.layer = layer;
+        foreach (Transform child in currentObject.transform)
+        {
+            AssignLayerRecursively(child.gameObject, layer);
+        }
+    }
+
     private void AlignSceneCameraWithWebcam()
     {
         if (!alignSceneCameraWithWebcam || sceneCamera == null)
@@ -410,67 +449,68 @@ public class WebcamMarkerGameController : MonoBehaviour
             return;
         }
 
-        CacheGameRootBounds();
-
         var gridWidth = Mathf.Max(1, currentMarkerGridWidth);
         var gridHeight = Mathf.Max(1, currentMarkerGridHeight);
         var minScreenX = markerCandidate.MinGridX / (float)gridWidth;
         var maxScreenX = markerCandidate.MaxGridX / (float)gridWidth;
         var minScreenY = markerCandidate.MinGridY / (float)gridHeight;
         var maxScreenY = markerCandidate.MaxGridY / (float)gridHeight;
-        var centerScreenX = (minScreenX + maxScreenX) * 0.5f;
-        var centerScreenY = (minScreenY + maxScreenY) * 0.5f;
 
-        if (!TryScreenPointToGround(centerScreenX, centerScreenY, out var markerCenter)
-            || !TryScreenPointToGround(minScreenX, centerScreenY, out var markerLeft)
-            || !TryScreenPointToGround(maxScreenX, centerScreenY, out var markerRight)
-            || !TryScreenPointToGround(centerScreenX, minScreenY, out var markerBottom)
-            || !TryScreenPointToGround(centerScreenX, maxScreenY, out var markerTop))
-        {
-            return;
-        }
-
-        var markerWorldWidth = Vector3.Distance(markerLeft, markerRight);
-        var markerWorldDepth = Vector3.Distance(markerBottom, markerTop);
-        var baseWidth = Mathf.Max(0.1f, gameRootBoundsReady ? gameRootLocalBounds.size.x : fallbackGameplayWidth);
-        var baseDepth = Mathf.Max(0.1f, gameRootBoundsReady ? gameRootLocalBounds.size.z : fallbackGameplayDepth);
-        var scaleValue = Mathf.Min(markerWorldWidth / baseWidth, markerWorldDepth / baseDepth) * markerGamePadding;
-        scaleValue = Mathf.Clamp(scaleValue, minMarkerGameScale, maxMarkerGameScale);
-
-        var targetScale = new Vector3(gameRootScale.x * scaleValue, gameRootScale.y * scaleValue, gameRootScale.z * scaleValue);
-        var targetRotation = Quaternion.Euler(gameRootRotation);
-        var scaledBoundsCenter = Vector3.Scale(gameRootBoundsReady ? gameRootLocalBounds.center : Vector3.zero, targetScale);
-        scaledBoundsCenter.y = 0f;
-        var targetPosition = new Vector3(markerCenter.x, gameRootPosition.y, markerCenter.z) - targetRotation * scaledBoundsCenter;
-        targetPosition.y = gameRootPosition.y;
-
-        if (immediate)
-        {
-            gameRoot.position = targetPosition;
-            gameRoot.rotation = targetRotation;
-            gameRoot.localScale = targetScale;
-            return;
-        }
-
-        var t = Mathf.Clamp01(markerPlacementSmoothness * Time.unscaledDeltaTime);
-        gameRoot.position = Vector3.Lerp(gameRoot.position, targetPosition, t);
-        gameRoot.rotation = Quaternion.Slerp(gameRoot.rotation, targetRotation, t);
-        gameRoot.localScale = Vector3.Lerp(gameRoot.localScale, targetScale, t);
+        var markerRect = CreatePaddedViewportRect(minScreenX, maxScreenX, minScreenY, maxScreenY);
+        UpdateMarkerGameCameraView(markerRect, immediate);
     }
 
-    private bool TryScreenPointToGround(float normalizedX, float normalizedY, out Vector3 worldPoint)
+    private Rect CreatePaddedViewportRect(float minX, float maxX, float minY, float maxY)
     {
-        worldPoint = Vector3.zero;
-        var screenPoint = new Vector3(normalizedX * Screen.width, normalizedY * Screen.height, 0f);
-        var ray = sceneCamera.ScreenPointToRay(screenPoint);
-        var groundPlane = new Plane(Vector3.up, new Vector3(0f, gameRootPosition.y, 0f));
-        if (!groundPlane.Raycast(ray, out var enter))
+        var centerX = (minX + maxX) * 0.5f;
+        var centerY = (minY + maxY) * 0.5f;
+        var width = Mathf.Abs(maxX - minX) * markerViewportPadding;
+        var height = Mathf.Abs(maxY - minY) * markerViewportPadding;
+
+        width = Mathf.Clamp(width, 0.08f, 1f);
+        height = Mathf.Clamp(height, 0.08f, 1f);
+
+        var x = Mathf.Clamp(centerX - width * 0.5f, 0f, 1f - width);
+        var y = Mathf.Clamp(centerY - height * 0.5f, 0f, 1f - height);
+        return new Rect(x, y, width, height);
+    }
+
+    private void UpdateMarkerGameCameraView(Rect viewportRect, bool immediate)
+    {
+        if (markerGameCamera == null || gameRoot == null)
         {
-            return false;
+            return;
         }
 
-        worldPoint = ray.GetPoint(enter);
-        return true;
+        CacheGameRootBounds();
+
+        var targetRect = viewportRect;
+        if (!immediate)
+        {
+            var t = Mathf.Clamp01(markerPlacementSmoothness * Time.unscaledDeltaTime);
+            targetRect = new Rect(
+                Mathf.Lerp(markerGameCamera.rect.x, viewportRect.x, t),
+                Mathf.Lerp(markerGameCamera.rect.y, viewportRect.y, t),
+                Mathf.Lerp(markerGameCamera.rect.width, viewportRect.width, t),
+                Mathf.Lerp(markerGameCamera.rect.height, viewportRect.height, t));
+        }
+
+        markerGameCamera.rect = targetRect;
+
+        var bounds = gameRootBoundsReady
+            ? gameRootLocalBounds
+            : new Bounds(Vector3.zero, new Vector3(fallbackGameplayWidth, 1f, fallbackGameplayDepth));
+        var targetRotation = Quaternion.Euler(markerOverlayCameraRotation);
+        var worldCenter = gameRoot.TransformPoint(bounds.center);
+        var cameraHeight = Mathf.Max(18f, bounds.size.y + 12f);
+        var targetPosition = worldCenter - targetRotation * Vector3.forward * cameraHeight;
+        markerGameCamera.transform.position = targetPosition;
+        markerGameCamera.transform.rotation = targetRotation;
+
+        var viewportAspect = Mathf.Max(0.1f, Screen.width * targetRect.width / Mathf.Max(1f, Screen.height * targetRect.height));
+        var widthSize = Mathf.Max(0.1f, bounds.size.x * Mathf.Abs(gameRoot.localScale.x));
+        var depthSize = Mathf.Max(0.1f, bounds.size.z * Mathf.Abs(gameRoot.localScale.z));
+        markerGameCamera.orthographicSize = Mathf.Max(depthSize * 0.5f, widthSize / (2f * viewportAspect)) * markerOverlayCameraPadding;
     }
 
     private void CacheGameRootBounds()
@@ -759,19 +799,160 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private float CalculateCheckerPatternScore(int minX, int maxX, int minY, int maxY)
     {
-        var bestScore = 0f;
+        var bestScore = CalculateCheckerTextureScore(minX, maxX, minY, maxY);
         for (var columns = 4; columns <= 14; columns++)
         {
             for (var rows = 4; rows <= 10; rows++)
             {
-                bestScore = Mathf.Max(bestScore, CalculateCheckerPatternScore(minX, maxX, minY, maxY, columns, rows));
+                bestScore = Mathf.Max(bestScore, CalculateExactCheckerPatternScore(minX, maxX, minY, maxY, columns, rows));
             }
         }
 
         return bestScore;
     }
 
-    private float CalculateCheckerPatternScore(int minX, int maxX, int minY, int maxY, int columns, int rows)
+    private float CalculateCheckerTextureScore(int minX, int maxX, int minY, int maxY)
+    {
+        var width = Mathf.Max(1, maxX - minX + 1);
+        var height = Mathf.Max(1, maxY - minY + 1);
+        if (width < 12 || height < 12)
+        {
+            return 0f;
+        }
+
+        var insetX = Mathf.Max(1, Mathf.RoundToInt(width * 0.03f));
+        var insetY = Mathf.Max(1, Mathf.RoundToInt(height * 0.03f));
+        minX += insetX;
+        maxX -= insetX;
+        minY += insetY;
+        maxY -= insetY;
+        width = Mathf.Max(1, maxX - minX + 1);
+        height = Mathf.Max(1, maxY - minY + 1);
+
+        var minLum = 255;
+        var maxLum = 0;
+        var sumLum = 0;
+        var totalCells = 0;
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                var luminance = ReadGridLuminance(x, y);
+                minLum = Mathf.Min(minLum, luminance);
+                maxLum = Mathf.Max(maxLum, luminance);
+                sumLum += luminance;
+                totalCells++;
+            }
+        }
+
+        if (maxLum - minLum < minCheckerContrast * 2
+            || minLum > maxCheckerDarkLuminance
+            || maxLum < minCheckerLightLuminance)
+        {
+            return 0f;
+        }
+
+        var threshold = sumLum / Mathf.Max(1, totalCells);
+        var darkCells = 0;
+        var lightCells = 0;
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                var luminance = ReadGridLuminance(x, y);
+                if (luminance < threshold - 8)
+                {
+                    darkCells++;
+                }
+                else if (luminance > threshold + 8)
+                {
+                    lightCells++;
+                }
+            }
+        }
+
+        var darkBalance = darkCells / (float)Mathf.Max(1, totalCells);
+        var lightBalance = lightCells / (float)Mathf.Max(1, totalCells);
+        if (darkBalance < 0.25f || darkBalance > 0.75f || lightBalance < 0.25f || lightBalance > 0.75f)
+        {
+            return 0f;
+        }
+
+        var verticalLineCount = 0;
+        var horizontalLineCount = 0;
+        var verticalTransitions = 0;
+        var horizontalTransitions = 0;
+        var verticalPairs = 0;
+        var horizontalPairs = 0;
+
+        for (var x = minX + 1; x <= maxX; x++)
+        {
+            var edgeHits = 0;
+            for (var y = minY; y <= maxY; y++)
+            {
+                var left = ReadGridLuminance(x - 1, y);
+                var right = ReadGridLuminance(x, y);
+                if (CrossesCheckerThreshold(left, right, threshold))
+                {
+                    edgeHits++;
+                }
+            }
+
+            verticalTransitions += edgeHits;
+            verticalPairs += height;
+            if (edgeHits / (float)Mathf.Max(1, height) >= 0.16f)
+            {
+                verticalLineCount++;
+            }
+        }
+
+        for (var y = minY + 1; y <= maxY; y++)
+        {
+            var edgeHits = 0;
+            for (var x = minX; x <= maxX; x++)
+            {
+                var bottom = ReadGridLuminance(x, y - 1);
+                var top = ReadGridLuminance(x, y);
+                if (CrossesCheckerThreshold(bottom, top, threshold))
+                {
+                    edgeHits++;
+                }
+            }
+
+            horizontalTransitions += edgeHits;
+            horizontalPairs += width;
+            if (edgeHits / (float)Mathf.Max(1, width) >= 0.16f)
+            {
+                horizontalLineCount++;
+            }
+        }
+
+        if (verticalLineCount < 4 || horizontalLineCount < 4)
+        {
+            return 0f;
+        }
+
+        var verticalTransitionRatio = verticalTransitions / (float)Mathf.Max(1, verticalPairs);
+        var horizontalTransitionRatio = horizontalTransitions / (float)Mathf.Max(1, horizontalPairs);
+        if (verticalTransitionRatio < 0.045f || horizontalTransitionRatio < 0.045f)
+        {
+            return 0f;
+        }
+
+        var transitionScore = Mathf.Clamp01((verticalTransitionRatio + horizontalTransitionRatio) / 0.18f);
+        var lineScore = Mathf.Min(Mathf.Clamp01(verticalLineCount / 6f), Mathf.Clamp01(horizontalLineCount / 5f));
+        var balanceScore = 1f - Mathf.Clamp01(Mathf.Abs(darkBalance - 0.5f) / 0.25f);
+        var contrastScore = Mathf.Clamp01((maxLum - minLum) / 170f);
+        return transitionScore * 0.35f + lineScore * 0.35f + balanceScore * 0.15f + contrastScore * 0.15f;
+    }
+
+    private bool CrossesCheckerThreshold(int first, int second, int threshold)
+    {
+        return Mathf.Abs(first - second) >= minCheckerContrast
+            && ((first < threshold && second > threshold) || (first > threshold && second < threshold));
+    }
+
+    private float CalculateExactCheckerPatternScore(int minX, int maxX, int minY, int maxY, int columns, int rows)
     {
         if (columns * rows < 24)
         {
@@ -1228,6 +1409,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         gameVisible = visible;
+
+        if (markerGameCamera != null)
+        {
+            markerGameCamera.enabled = visible;
+        }
 
         foreach (var currentRenderer in gameRoot.GetComponentsInChildren<Renderer>(true))
         {
