@@ -8,6 +8,7 @@ public class EnemyRobotChaser : MonoBehaviour
 {
     [SerializeField] private string targetObjectName = "Robot Player";
     [SerializeField] private float moveSpeed = 2.4f;
+    [SerializeField] private float playerSpeedMultiplier = 0.82f;
     [SerializeField] private float rotationSpeed = 8f;
     [SerializeField] private float stopDistance = 0.05f;
     [SerializeField] private float startDelay = 1.5f;
@@ -74,7 +75,7 @@ public class EnemyRobotChaser : MonoBehaviour
             return;
         }
 
-        var currentMoveSpeed = targetPlayerController != null ? targetPlayerController.MoveSpeed : moveSpeed;
+        var currentMoveSpeed = GetCurrentMoveSpeed();
         var moveDirection = direction.normalized;
         var targetRotation = Quaternion.LookRotation(moveDirection, Vector3.up);
         enemyRigidbody.MoveRotation(Quaternion.Slerp(enemyRigidbody.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
@@ -92,6 +93,16 @@ public class EnemyRobotChaser : MonoBehaviour
             target = playerObject.transform;
             targetPlayerController = playerObject.GetComponent<RobotCoinPlayerController>();
         }
+    }
+
+    private float GetCurrentMoveSpeed()
+    {
+        if (targetPlayerController == null)
+        {
+            return moveSpeed;
+        }
+
+        return targetPlayerController.MoveSpeed * playerSpeedMultiplier;
     }
 
     private void SetAnimationSpeed(float speed)

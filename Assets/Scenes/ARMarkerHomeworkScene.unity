@@ -781,6 +781,7 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   targetObjectName: Robot Player
   moveSpeed: 2.4
+  playerSpeedMultiplier: 0.82
   rotationSpeed: 8
   stopDistance: 0.05
   startDelay: 1.5
@@ -2871,7 +2872,6 @@ MonoBehaviour:
   fallbackGameplayDepth: 18
   markerPlacementSmoothness: 2.2
   markerBoundsSmoothness: 3
-  markerViewportDeadZone: 0.018
   gameRenderLayer: 30
   markerRenderTextureWidth: 1024
   markerRenderTextureHeight: 768
