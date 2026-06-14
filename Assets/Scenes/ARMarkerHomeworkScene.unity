@@ -2834,7 +2834,7 @@ MonoBehaviour:
   minMarkerDensity: 0.4
   maxDarkMarkerDensity: 0.2
   markerDistanceFromCamera: 7.2
-  gameScaleAtMarker: 0.22
+  gameScaleAtMarker: 0.055
   followSharpness: 8
   markerLostDelay: 1.25
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"

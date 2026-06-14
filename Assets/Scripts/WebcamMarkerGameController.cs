@@ -18,7 +18,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float minMarkerDensity = 0.4f;
     [SerializeField] private float maxDarkMarkerDensity = 0.2f;
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
-    [SerializeField] private float gameScaleAtMarker = 0.22f;
+    [SerializeField] private float gameScaleAtMarker = 0.055f;
     [SerializeField] private float followSharpness = 8f;
     [SerializeField] private float markerLostDelay = 1.25f;
     [SerializeField] private string markerHelpText = "Маркер: чистый белый лист А4";
@@ -583,7 +583,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var targetPosition = sceneCamera.ViewportToWorldPoint(new Vector3(marker.Center.x, marker.Center.y, markerDistanceFromCamera));
         var targetRotation = Quaternion.Euler(0f, sceneCamera.transform.eulerAngles.y, 0f);
         var markerScale = Mathf.InverseLerp(minMarkerSize, maxMarkerSize, marker.Size);
-        var targetScale = gameScaleAtMarker * Mathf.Lerp(0.82f, 1.35f, markerScale);
+        var targetScale = gameScaleAtMarker * Mathf.Lerp(0.8f, 1.1f, markerScale);
         var blend = 1f - Mathf.Exp(-followSharpness * Time.unscaledDeltaTime);
 
         gameRoot.position = Vector3.Lerp(gameRoot.position, targetPosition, blend);
