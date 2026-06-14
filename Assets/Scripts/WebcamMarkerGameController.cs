@@ -12,9 +12,10 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedHeight = 480;
     [SerializeField] private int requestedFps = 30;
     [SerializeField] private int darkThreshold = 72;
+    [SerializeField] private int brightThreshold = 145;
     [SerializeField] private int sampleStep = 4;
     [SerializeField] private float minMarkerSize = 0.08f;
-    [SerializeField] private float maxMarkerSize = 0.68f;
+    [SerializeField] private float maxMarkerSize = 0.9f;
     [SerializeField] private float minMarkerDensity = 0.18f;
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
     [SerializeField] private float gameScaleAtMarker = 0.18f;
@@ -27,8 +28,10 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private WebCamTexture webcamTexture;
     private Color32[] cameraPixels;
-    private int[] darkColumnCounts;
-    private int[] darkRowCounts;
+    private byte[] brightMarkerCells;
+    private byte[] darkMarkerCells;
+    private byte[] visitedMarkerCells;
+    private int[] componentQueue;
     private GameObject backgroundObject;
     private Material backgroundMaterial;
     private Text statusText;
@@ -44,6 +47,18 @@ public class WebcamMarkerGameController : MonoBehaviour
         public Vector2 Center;
         public float Size;
         public float Density;
+    }
+
+    private struct BrightMarkerComponent
+    {
+        public bool Found;
+        public int MinX;
+        public int MaxX;
+        public int MinY;
+        public int MaxY;
+        public int BrightCount;
+        public float BrightDensity;
+        public float DarkDensity;
     }
 
     private void Awake()
@@ -260,94 +275,203 @@ public class WebcamMarkerGameController : MonoBehaviour
             cameraPixels = new Color32[pixelCount];
         }
 
-        if (darkColumnCounts == null || darkColumnCounts.Length != width)
-        {
-            darkColumnCounts = new int[width];
-        }
-        else
-        {
-            Array.Clear(darkColumnCounts, 0, darkColumnCounts.Length);
-        }
-
-        if (darkRowCounts == null || darkRowCounts.Length != height)
-        {
-            darkRowCounts = new int[height];
-        }
-        else
-        {
-            Array.Clear(darkRowCounts, 0, darkRowCounts.Length);
-        }
-
         webcamTexture.GetPixels32(cameraPixels);
 
-        var darkPixels = 0;
+        var gridWidth = Mathf.Max(1, width / sampleStep);
+        var gridHeight = Mathf.Max(1, height / sampleStep);
+        var gridLength = gridWidth * gridHeight;
+        EnsureMarkerGridSize(gridLength);
 
-        for (var y = 0; y < height; y += sampleStep)
+        for (var gridY = 0; gridY < gridHeight; gridY++)
         {
+            var y = gridY * sampleStep;
             var lineStart = y * width;
-            for (var x = 0; x < width; x += sampleStep)
+            for (var gridX = 0; gridX < gridWidth; gridX++)
             {
+                var x = gridX * sampleStep;
                 var color = cameraPixels[lineStart + x];
                 var luminance = (color.r * 30 + color.g * 59 + color.b * 11) / 100;
-                if (luminance > darkThreshold)
+                var cellIndex = gridY * gridWidth + gridX;
+
+                if (IsBrightMarkerPixel(color, luminance))
                 {
-                    continue;
+                    brightMarkerCells[cellIndex] = 1;
                 }
 
-                darkPixels++;
-                darkColumnCounts[x]++;
-                darkRowCounts[y]++;
+                if (luminance <= darkThreshold)
+                {
+                    darkMarkerCells[cellIndex] = 1;
+                }
             }
         }
 
-        if (darkPixels < 18)
+        var bestObservation = FindBestBrightMarkerComponent(gridWidth, gridHeight, width, height);
+
+        if (!bestObservation.Found)
         {
             return observation;
         }
 
-        var minX = FindHistogramPosition(darkColumnCounts, darkPixels, 0.04f);
-        var maxX = FindHistogramPosition(darkColumnCounts, darkPixels, 0.96f);
-        var minY = FindHistogramPosition(darkRowCounts, darkPixels, 0.04f);
-        var maxY = FindHistogramPosition(darkRowCounts, darkPixels, 0.96f);
+        return bestObservation;
+    }
 
-        if (minX >= maxX || minY >= maxY)
+    private void EnsureMarkerGridSize(int gridLength)
+    {
+        if (brightMarkerCells == null || brightMarkerCells.Length != gridLength)
         {
-            return observation;
+            brightMarkerCells = new byte[gridLength];
+            darkMarkerCells = new byte[gridLength];
+            visitedMarkerCells = new byte[gridLength];
+            componentQueue = new int[gridLength];
+            return;
         }
 
-        var markerWidth = maxX - minX + 1;
-        var markerHeight = maxY - minY + 1;
-        var markerSize = Mathf.Max(markerWidth / (float)width, markerHeight / (float)height);
-        var aspect = markerWidth / (float)markerHeight;
-        var sampledArea = Mathf.Max(1f, markerWidth * markerHeight / (float)(sampleStep * sampleStep));
-        var density = darkPixels / sampledArea;
+        Array.Clear(brightMarkerCells, 0, gridLength);
+        Array.Clear(darkMarkerCells, 0, gridLength);
+        Array.Clear(visitedMarkerCells, 0, gridLength);
+    }
 
-        if (markerSize < minMarkerSize || markerSize > maxMarkerSize || aspect < 0.55f || aspect > 1.8f || density < minMarkerDensity)
+    private bool IsBrightMarkerPixel(Color32 color, int luminance)
+    {
+        return luminance >= brightThreshold && color.r >= 118 && color.g >= 118 && color.b >= 118;
+    }
+
+    private MarkerObservation FindBestBrightMarkerComponent(int gridWidth, int gridHeight, int imageWidth, int imageHeight)
+    {
+        var bestObservation = new MarkerObservation();
+        var bestScore = 0f;
+
+        for (var startIndex = 0; startIndex < brightMarkerCells.Length; startIndex++)
+        {
+            if (brightMarkerCells[startIndex] == 0 || visitedMarkerCells[startIndex] != 0)
+            {
+                continue;
+            }
+
+            var component = ReadBrightComponent(startIndex, gridWidth, gridHeight);
+            if (!component.Found)
+            {
+                continue;
+            }
+
+            var marker = CreateObservationFromComponent(component, gridWidth, imageWidth, imageHeight);
+            if (!marker.Found)
+            {
+                continue;
+            }
+
+            var componentWidth = component.MaxX - component.MinX + 1;
+            var componentHeight = component.MaxY - component.MinY + 1;
+            var aspect = componentWidth / (float)Mathf.Max(1, componentHeight);
+            var squareBonus = Mathf.Clamp01(1f - Mathf.Abs(1f - aspect));
+            var score = component.BrightCount * component.BrightDensity * (1f + component.DarkDensity + squareBonus);
+            if (score <= bestScore)
+            {
+                continue;
+            }
+
+            bestScore = score;
+            bestObservation = marker;
+        }
+
+        return bestObservation;
+    }
+
+    private BrightMarkerComponent ReadBrightComponent(int startIndex, int gridWidth, int gridHeight)
+    {
+        var result = new BrightMarkerComponent();
+        var head = 0;
+        var tail = 0;
+        var minX = gridWidth;
+        var maxX = 0;
+        var minY = gridHeight;
+        var maxY = 0;
+        var brightCount = 0;
+
+        componentQueue[tail++] = startIndex;
+        visitedMarkerCells[startIndex] = 1;
+
+        while (head < tail)
+        {
+            var index = componentQueue[head++];
+            var x = index % gridWidth;
+            var y = index / gridWidth;
+
+            minX = Mathf.Min(minX, x);
+            maxX = Mathf.Max(maxX, x);
+            minY = Mathf.Min(minY, y);
+            maxY = Mathf.Max(maxY, y);
+            brightCount++;
+
+            AddBrightNeighbor(index - 1, x > 0, ref tail);
+            AddBrightNeighbor(index + 1, x < gridWidth - 1, ref tail);
+            AddBrightNeighbor(index - gridWidth, y > 0, ref tail);
+            AddBrightNeighbor(index + gridWidth, y < gridHeight - 1, ref tail);
+        }
+
+        var width = maxX - minX + 1;
+        var height = maxY - minY + 1;
+        var area = Mathf.Max(1, width * height);
+        var brightDensity = brightCount / (float)area;
+        var darkDensity = CountDarkCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
+
+        result.Found = brightCount >= 28 && brightDensity >= minMarkerDensity && darkDensity >= 0.05f;
+        result.MinX = minX;
+        result.MaxX = maxX;
+        result.MinY = minY;
+        result.MaxY = maxY;
+        result.BrightCount = brightCount;
+        result.BrightDensity = brightDensity;
+        result.DarkDensity = darkDensity;
+        return result;
+    }
+
+    private void AddBrightNeighbor(int index, bool canUse, ref int tail)
+    {
+        if (!canUse || brightMarkerCells[index] == 0 || visitedMarkerCells[index] != 0)
+        {
+            return;
+        }
+
+        visitedMarkerCells[index] = 1;
+        componentQueue[tail++] = index;
+    }
+
+    private int CountDarkCells(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        var count = 0;
+        for (var y = minY; y <= maxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = minX; x <= maxX; x++)
+            {
+                count += darkMarkerCells[rowStart + x];
+            }
+        }
+
+        return count;
+    }
+
+    private MarkerObservation CreateObservationFromComponent(BrightMarkerComponent component, int gridWidth, int imageWidth, int imageHeight)
+    {
+        var observation = new MarkerObservation();
+        var width = Mathf.Max(1, component.MaxX - component.MinX + 1);
+        var height = Mathf.Max(1, component.MaxY - component.MinY + 1);
+        var aspect = width / (float)height;
+        var markerWidth = width * sampleStep;
+        var markerHeight = height * sampleStep;
+        var markerSize = Mathf.Max(markerWidth / (float)imageWidth, markerHeight / (float)imageHeight);
+
+        if (markerSize < minMarkerSize || markerSize > maxMarkerSize || aspect < 0.55f || aspect > 1.8f)
         {
             return observation;
         }
 
         observation.Found = true;
-        observation.Center = new Vector2((minX + maxX) * 0.5f / width, (minY + maxY) * 0.5f / height);
+        observation.Center = new Vector2((component.MinX + component.MaxX + 1f) * sampleStep * 0.5f / imageWidth, (component.MinY + component.MaxY + 1f) * sampleStep * 0.5f / imageHeight);
         observation.Size = markerSize;
-        observation.Density = density;
+        observation.Density = component.BrightDensity + component.DarkDensity;
         return observation;
-    }
-
-    private int FindHistogramPosition(int[] histogram, int totalCount, float fraction)
-    {
-        var targetCount = Mathf.Clamp(Mathf.RoundToInt(totalCount * fraction), 1, totalCount);
-        var accumulated = 0;
-        for (var i = 0; i < histogram.Length; i++)
-        {
-            accumulated += histogram[i];
-            if (accumulated >= targetCount)
-            {
-                return i;
-            }
-        }
-
-        return histogram.Length - 1;
     }
 
     private void PlaceGameOnMarker(MarkerObservation marker)
@@ -391,7 +515,34 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             currentRigidbody.velocity = Vector3.zero;
             currentRigidbody.angularVelocity = Vector3.zero;
-            currentRigidbody.isKinematic = !visible;
+            if (visible)
+            {
+                currentRigidbody.isKinematic = false;
+                currentRigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            }
+            else
+            {
+                currentRigidbody.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                currentRigidbody.isKinematic = true;
+            }
+        }
+
+        SetRuntimeGameCanvasVisible("Homework 10 HUD Canvas", visible);
+        SetRuntimeGameCanvasVisible("Homework 12 Score Canvas", visible);
+    }
+
+    private void SetRuntimeGameCanvasVisible(string canvasName, bool visible)
+    {
+        var canvasObject = GameObject.Find(canvasName);
+        if (canvasObject == null)
+        {
+            return;
+        }
+
+        var canvas = canvasObject.GetComponent<Canvas>();
+        if (canvas != null)
+        {
+            canvas.enabled = visible;
         }
     }
 

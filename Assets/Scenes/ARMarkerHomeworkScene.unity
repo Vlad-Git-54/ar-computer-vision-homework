@@ -2828,9 +2828,10 @@ MonoBehaviour:
   requestedHeight: 480
   requestedFps: 30
   darkThreshold: 72
+  brightThreshold: 145
   sampleStep: 4
   minMarkerSize: 0.08
-  maxMarkerSize: 0.68
+  maxMarkerSize: 0.9
   minMarkerDensity: 0.18
   markerDistanceFromCamera: 7.2
   gameScaleAtMarker: 0.18
