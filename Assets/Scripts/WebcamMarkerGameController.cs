@@ -30,15 +30,19 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: шахматная доска любого размера";
     [SerializeField] private bool useFixedTabletMarkerPlacement = true;
-    [SerializeField] private Vector2 fixedTabletMarkerMin = new Vector2(0.36f, 0.38f);
-    [SerializeField] private Vector2 fixedTabletMarkerMax = new Vector2(0.70f, 0.66f);
+    [SerializeField] private Vector2 fixedTabletMarkerMin = new Vector2(0.35f, 0.38f);
+    [SerializeField] private Vector2 fixedTabletMarkerMax = new Vector2(0.71f, 0.70f);
+    [SerializeField] private bool alignSceneCameraWithWebcam = true;
+    [SerializeField] private Vector3 webcamCameraPosition = new Vector3(0f, 9.5f, -6.2f);
+    [SerializeField] private Vector3 webcamCameraRotation = new Vector3(61f, 0f, 0f);
+    [SerializeField] private float webcamCameraFieldOfView = 62f;
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 gameRootPosition = Vector3.zero;
     [SerializeField] private Vector3 gameRootRotation = Vector3.zero;
     [SerializeField] private Vector3 gameRootScale = Vector3.one;
     [SerializeField] private float fallbackGameplayWidth = 24f;
     [SerializeField] private float fallbackGameplayDepth = 18f;
-    [SerializeField] private float markerGamePadding = 0.86f;
+    [SerializeField] private float markerGamePadding = 0.98f;
     [SerializeField] private float minMarkerGameScale = 0.08f;
     [SerializeField] private float maxMarkerGameScale = 1.1f;
     [SerializeField] private float markerPlacementSmoothness = 6f;
@@ -57,6 +61,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private bool gameVisible;
     private bool markerWasFound;
     private bool gameTriggered;
+    private bool gamePlacedOnMarker;
     private bool markerPauseActive;
     private float timeScaleBeforeMarkerPause = 1f;
     private int stableMarkerFrames;
@@ -119,6 +124,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         if (setupSceneAutomatically)
         {
             CreateGameRootFromSceneIfNeeded();
+            AlignSceneCameraWithWebcam();
             PlaceGameNormally();
         }
     }
@@ -154,6 +160,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             stableMarkerFrames = 0;
             gameTriggered = false;
+            gamePlacedOnMarker = false;
         }
 
         SetGameVisible(shouldShowGame, false);
@@ -161,7 +168,12 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         if (shouldShowGame)
         {
-            PlaceGameOnMarker(lastCheckerboardCandidate, false);
+            if (!gamePlacedOnMarker)
+            {
+                PlaceGameOnMarker(lastCheckerboardCandidate, true);
+                gamePlacedOnMarker = true;
+            }
+
             UpdateStatus(true, "Шахматный маркер найден, игра размещена по его границам");
             return;
         }
@@ -195,7 +207,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         if (stableMarkerFrames >= stableFramesToShow)
         {
             gameTriggered = true;
-            PlaceGameOnMarker(lastCheckerboardCandidate, !gameVisible);
+            if (!gamePlacedOnMarker)
+            {
+                PlaceGameOnMarker(lastCheckerboardCandidate, true);
+                gamePlacedOnMarker = true;
+            }
         }
     }
 
@@ -360,6 +376,24 @@ public class WebcamMarkerGameController : MonoBehaviour
         gameRoot.position = gameRootPosition;
         gameRoot.rotation = Quaternion.Euler(gameRootRotation);
         gameRoot.localScale = gameRootScale;
+    }
+
+    private void AlignSceneCameraWithWebcam()
+    {
+        if (!alignSceneCameraWithWebcam || sceneCamera == null)
+        {
+            return;
+        }
+
+        var follow = sceneCamera.GetComponent<ThirdPersonCameraFollow>();
+        if (follow != null)
+        {
+            follow.enabled = false;
+        }
+
+        sceneCamera.transform.position = webcamCameraPosition;
+        sceneCamera.transform.rotation = Quaternion.Euler(webcamCameraRotation);
+        sceneCamera.fieldOfView = webcamCameraFieldOfView;
     }
 
     private void PlaceGameOnMarker(CheckerboardMarkerCandidate markerCandidate, bool immediate)
