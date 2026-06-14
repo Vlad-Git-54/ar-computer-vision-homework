@@ -20,4 +20,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/ARMarkerHomeworkScene.unity
     guid: 8a5a5ac755a447c5b51a54e263784b38
+  - enabled: 1
+    path: Assets/Scenes/ContourTrackingHomeworkScene.unity
+    guid: 4eaac02e47b445c6a3cb57df4c44f7fa
   m_configObjects: {}
