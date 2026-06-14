@@ -141,7 +141,12 @@ public class FinalMainMenuController : MonoBehaviour
         var status = CreateText("Webcam Status", canvasObject.transform, "", 18, TextAnchor.MiddleCenter, new Color(0.78f, 0.88f, 1f, 1f));
         SetAnchored(status.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 34f), new Vector2(920f, 32f), new Vector2(0.5f, 0f));
 
-        gestureInput = gameObject.AddComponent<FinalWebcamGestureInput>();
+        gestureInput = GetComponent<FinalWebcamGestureInput>();
+        if (gestureInput == null)
+        {
+            gestureInput = gameObject.AddComponent<FinalWebcamGestureInput>();
+        }
+
         gestureInput.SetPreview(preview);
         gestureInput.SetStatus(status);
 

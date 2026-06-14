@@ -26,6 +26,12 @@ public class FinalGameController : MonoBehaviour
     [SerializeField] private Vector2 arenaSize = new Vector2(42f, 24f);
     [SerializeField] private float gestureHoldTime = 0.8f;
 
+    [Header("Camera")]
+    [SerializeField] private Vector3 cameraOffset = new Vector3(0f, 4.3f, -7.4f);
+    [SerializeField] private float cameraFollowSpeed = 7f;
+    [SerializeField] private float cameraLookHeight = 1.2f;
+    [SerializeField] private bool cameraFollowsPlayerRotation = true;
+
     private const string PlayerColorKey = "FinalProjectPlayerColor";
     private const string HighScoreKey = "FinalProjectHighScore";
 
@@ -34,9 +40,6 @@ public class FinalGameController : MonoBehaviour
     private readonly List<GameObject> enemies = new List<GameObject>();
     private readonly Color floorColor = new Color(0.56f, 0.82f, 0.75f, 1f);
     private readonly Color wallColor = new Color(0.55f, 0.63f, 0.76f, 1f);
-    private readonly Vector3 cameraOffset = new Vector3(0f, 4.3f, -7.4f);
-    private const float CameraLookHeight = 1.2f;
-
     private NavMeshData navMeshData;
     private NavMeshDataInstance navMeshInstance;
     private Transform arenaRoot;
@@ -371,8 +374,9 @@ public class FinalGameController : MonoBehaviour
         }
 
         SetPrivateField(follow, "offset", cameraOffset);
-        SetPrivateField(follow, "followSpeed", 7f);
-        SetPrivateField(follow, "lookHeight", CameraLookHeight);
+        SetPrivateField(follow, "followSpeed", cameraFollowSpeed);
+        SetPrivateField(follow, "lookHeight", cameraLookHeight);
+        SetPrivateField(follow, "followTargetRotation", cameraFollowsPlayerRotation);
     }
 
     private void SpawnPlayer()
@@ -445,8 +449,9 @@ public class FinalGameController : MonoBehaviour
             return;
         }
 
-        gameCamera.transform.position = playerTransform.position + cameraOffset;
-        gameCamera.transform.LookAt(playerTransform.position + Vector3.up * CameraLookHeight);
+        var offset = cameraFollowsPlayerRotation ? playerTransform.rotation * cameraOffset : cameraOffset;
+        gameCamera.transform.position = playerTransform.position + offset;
+        gameCamera.transform.LookAt(playerTransform.position + Vector3.up * cameraLookHeight);
     }
 
     private GameObject CreateRobotActor(string objectName, Vector3 position, Color color, RuntimeAnimatorController controller)
@@ -845,7 +850,12 @@ public class FinalGameController : MonoBehaviour
         var preview = CreateRawImage("AR Gesture Preview", panel.transform);
         SetAnchored(preview.rectTransform, new Vector2(1f, 0.5f), new Vector2(-14f, 0f), new Vector2(104f, 72f), new Vector2(1f, 0.5f));
 
-        gestureInput = gameObject.AddComponent<FinalWebcamGestureInput>();
+        gestureInput = GetComponent<FinalWebcamGestureInput>();
+        if (gestureInput == null)
+        {
+            gestureInput = gameObject.AddComponent<FinalWebcamGestureInput>();
+        }
+
         gestureInput.SetPreview(preview);
         gestureInput.SetStatus(status);
     }

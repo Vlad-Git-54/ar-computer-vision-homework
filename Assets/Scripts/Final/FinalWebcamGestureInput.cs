@@ -1,5 +1,6 @@
 // Автор: Марьяновский Владислав Андреевич
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -16,44 +17,39 @@ public class FinalWebcamGestureInput : MonoBehaviour
     [SerializeField] private RawImage previewImage;
     [SerializeField] private Text statusText;
     [SerializeField] private bool mirrorPreview = true;
-    [SerializeField] private float sampleInterval = 0.06f;
-    [SerializeField] private float activationThreshold = 0.022f;
-    [SerializeField] private float confidenceGap = 0.006f;
+    [SerializeField] private float sampleInterval = 0.05f;
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 360;
     [SerializeField] private int requestedFps = 30;
-    [SerializeField] private int pixelStep = 5;
-    [SerializeField] private int backgroundDifferenceThreshold = 34;
-
-    private const int BackgroundFramesNeeded = 8;
-    private const int TemplateWidth = 24;
-    private const int TemplateHeight = 16;
+    [SerializeField] private int motionThreshold = 42;
+    [SerializeField] private int blockSize = 8;
+    [SerializeField] private int minChangedPixelsPerBlock = 8;
+    [SerializeField] private int minBlobBlocks = 5;
+    [SerializeField] private float zoneLatchSeconds = 1.1f;
 
     private WebCamTexture webcamTexture;
     private Texture2D binaryPreviewTexture;
     private Color32[] currentPixels;
-    private Color32[] backgroundPixels;
+    private Color32[] previousPixels;
     private Color32[] binaryPixels;
-    private int[] backgroundR;
-    private int[] backgroundG;
-    private int[] backgroundB;
-    private byte[] leftTemplate;
-    private byte[] centerTemplate;
-    private byte[] rightTemplate;
+    private bool[] movingBlocks;
+    private bool[] largestBlobBlocks;
+    private bool[] visitedBlocks;
     private int cachedWidth;
     private int cachedHeight;
-    private int backgroundFramesCollected;
+    private int gridWidth;
+    private int gridHeight;
     private float nextSampleTime;
     private float webcamStartTime;
     private float leftScore;
     private float centerScore;
     private float rightScore;
+    private float lastDetectionTime;
     private FinalGestureZone activeZone;
     private FinalGestureZone heldZone;
+    private FinalGestureZone lastDetectedZone;
     private float heldTime;
     private float lastConsumeTime;
-    private bool backgroundReady;
-    private bool capturingBackground;
     private bool triedDefaultCameraFallback;
 
     public FinalGestureZone ActiveZone => activeZone;
@@ -81,26 +77,6 @@ public class FinalWebcamGestureInput : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.B))
-        {
-            RequestBackgroundCapture();
-        }
-
-        if (Input.GetKeyDown(KeyCode.F1))
-        {
-            CaptureTemplate(FinalGestureZone.Left);
-        }
-
-        if (Input.GetKeyDown(KeyCode.F2))
-        {
-            CaptureTemplate(FinalGestureZone.Center);
-        }
-
-        if (Input.GetKeyDown(KeyCode.F3))
-        {
-            CaptureTemplate(FinalGestureZone.Right);
-        }
-
         RestartSlowCameraIfNeeded();
         SampleWebcamIfNeeded();
         UpdateHeldZone();
@@ -164,7 +140,6 @@ public class FinalWebcamGestureInput : MonoBehaviour
         webcamStartTime = Time.unscaledTime;
         triedDefaultCameraFallback = useDefaultConstructor;
         ResetFrameCache();
-        RequestBackgroundCapture();
         ApplyPreviewTexture();
     }
 
@@ -197,25 +172,19 @@ public class FinalWebcamGestureInput : MonoBehaviour
         cachedWidth = 0;
         cachedHeight = 0;
         currentPixels = null;
-        backgroundPixels = null;
+        previousPixels = null;
         binaryPixels = null;
         binaryPreviewTexture = null;
+        movingBlocks = null;
+        largestBlobBlocks = null;
+        visitedBlocks = null;
         leftScore = 0f;
         centerScore = 0f;
         rightScore = 0f;
         activeZone = FinalGestureZone.None;
         heldZone = FinalGestureZone.None;
+        lastDetectedZone = FinalGestureZone.None;
         heldTime = 0f;
-    }
-
-    private void RequestBackgroundCapture()
-    {
-        backgroundReady = false;
-        capturingBackground = true;
-        backgroundFramesCollected = 0;
-        backgroundR = null;
-        backgroundG = null;
-        backgroundB = null;
     }
 
     private void SampleWebcamIfNeeded()
@@ -241,25 +210,33 @@ public class FinalWebcamGestureInput : MonoBehaviour
         EnsureFrameBuffers();
         webcamTexture.GetPixels32(currentPixels);
 
-        if (capturingBackground)
+        if (previousPixels == null)
         {
-            CaptureBackgroundFrame();
-            DrawBinaryPreview(false);
+            previousPixels = new Color32[currentPixels.Length];
+            System.Array.Copy(currentPixels, previousPixels, currentPixels.Length);
+            ClearPreview();
             activeZone = FinalGestureZone.None;
             return;
         }
 
-        DrawBinaryPreview(true);
-        var newLeftScore = CalculateZoneScore(0f, 0.34f);
-        var newCenterScore = CalculateZoneScore(0.33f, 0.67f);
-        var newRightScore = CalculateZoneScore(0.66f, 1f);
-        AddTemplateScores(ref newLeftScore, ref newCenterScore, ref newRightScore);
+        var detectedZone = DetectMotionContour();
+        System.Array.Copy(currentPixels, previousPixels, currentPixels.Length);
 
-        leftScore = Mathf.Lerp(leftScore, newLeftScore, 0.68f);
-        centerScore = Mathf.Lerp(centerScore, newCenterScore, 0.68f);
-        rightScore = Mathf.Lerp(rightScore, newRightScore, 0.68f);
-
-        activeZone = ChooseActiveZone();
+        if (detectedZone != FinalGestureZone.None)
+        {
+            activeZone = detectedZone;
+            lastDetectedZone = detectedZone;
+            lastDetectionTime = Time.unscaledTime;
+        }
+        else if (lastDetectedZone != FinalGestureZone.None && Time.unscaledTime - lastDetectionTime <= zoneLatchSeconds)
+        {
+            activeZone = lastDetectedZone;
+        }
+        else
+        {
+            activeZone = FinalGestureZone.None;
+            lastDetectedZone = FinalGestureZone.None;
+        }
     }
 
     private void EnsureFrameBuffers()
@@ -271,265 +248,266 @@ public class FinalWebcamGestureInput : MonoBehaviour
 
         cachedWidth = webcamTexture.width;
         cachedHeight = webcamTexture.height;
+        gridWidth = Mathf.CeilToInt((float)cachedWidth / blockSize);
+        gridHeight = Mathf.CeilToInt((float)cachedHeight / blockSize);
         currentPixels = new Color32[cachedWidth * cachedHeight];
-        backgroundPixels = new Color32[cachedWidth * cachedHeight];
+        previousPixels = null;
         binaryPixels = new Color32[cachedWidth * cachedHeight];
+        movingBlocks = new bool[gridWidth * gridHeight];
+        largestBlobBlocks = new bool[gridWidth * gridHeight];
+        visitedBlocks = new bool[gridWidth * gridHeight];
         binaryPreviewTexture = new Texture2D(cachedWidth, cachedHeight, TextureFormat.RGBA32, false);
         binaryPreviewTexture.wrapMode = TextureWrapMode.Clamp;
         binaryPreviewTexture.filterMode = FilterMode.Point;
         ApplyPreviewTexture();
-        RequestBackgroundCapture();
+        ClearPreview();
     }
 
-    private void CaptureBackgroundFrame()
+    private FinalGestureZone DetectMotionContour()
     {
-        if (backgroundR == null || backgroundR.Length != currentPixels.Length)
+        System.Array.Clear(movingBlocks, 0, movingBlocks.Length);
+        System.Array.Clear(largestBlobBlocks, 0, largestBlobBlocks.Length);
+        System.Array.Clear(visitedBlocks, 0, visitedBlocks.Length);
+
+        BuildMotionBlocks();
+        var blob = FindLargestBlob();
+        DrawMotionPreview(blob);
+
+        leftScore = 0f;
+        centerScore = 0f;
+        rightScore = 0f;
+
+        if (blob.Count < minBlobBlocks)
         {
-            backgroundR = new int[currentPixels.Length];
-            backgroundG = new int[currentPixels.Length];
-            backgroundB = new int[currentPixels.Length];
+            return FinalGestureZone.None;
         }
 
-        for (var i = 0; i < currentPixels.Length; i++)
+        var normalizedX = blob.CenterX / Mathf.Max(1f, gridWidth - 1f);
+        var confidence = Mathf.Clamp01((float)blob.Count / 42f);
+        if (normalizedX < 0.34f)
         {
-            backgroundR[i] += currentPixels[i].r;
-            backgroundG[i] += currentPixels[i].g;
-            backgroundB[i] += currentPixels[i].b;
+            leftScore = confidence;
+            return FinalGestureZone.Left;
         }
 
-        backgroundFramesCollected++;
-        if (backgroundFramesCollected < BackgroundFramesNeeded)
+        if (normalizedX > 0.66f)
         {
-            return;
+            rightScore = confidence;
+            return FinalGestureZone.Right;
         }
 
-        for (var i = 0; i < currentPixels.Length; i++)
-        {
-            backgroundPixels[i] = new Color32(
-                (byte)(backgroundR[i] / BackgroundFramesNeeded),
-                (byte)(backgroundG[i] / BackgroundFramesNeeded),
-                (byte)(backgroundB[i] / BackgroundFramesNeeded),
-                255);
-        }
-
-        backgroundReady = true;
-        capturingBackground = false;
+        centerScore = confidence;
+        return FinalGestureZone.Center;
     }
 
-    private void DrawBinaryPreview(bool useBackground)
+    private void BuildMotionBlocks()
     {
-        for (var i = 0; i < currentPixels.Length; i++)
+        for (var by = 0; by < gridHeight; by++)
         {
-            var foreground = useBackground && IsForeground(i);
-            byte value;
-            if (useBackground)
+            for (var bx = 0; bx < gridWidth; bx++)
             {
-                value = foreground ? (byte)255 : (byte)0;
-            }
-            else
-            {
-                var gray = GetGray(currentPixels[i]);
-                value = gray > 118 ? (byte)255 : (byte)0;
-            }
+                var changed = 0;
+                var startX = bx * blockSize;
+                var startY = by * blockSize;
+                var endX = Mathf.Min(startX + blockSize, cachedWidth);
+                var endY = Mathf.Min(startY + blockSize, cachedHeight);
 
-            binaryPixels[i] = new Color32(value, value, value, 255);
+                for (var y = startY; y < endY; y += 2)
+                {
+                    for (var x = startX; x < endX; x += 2)
+                    {
+                        var sourceX = mirrorPreview ? cachedWidth - 1 - x : x;
+                        var index = y * cachedWidth + sourceX;
+                        if (IsMovingPixel(index))
+                        {
+                            changed++;
+                        }
+                    }
+                }
+
+                movingBlocks[BlockIndex(bx, by)] = changed >= minChangedPixelsPerBlock;
+            }
+        }
+    }
+
+    private MotionBlob FindLargestBlob()
+    {
+        var largest = new MotionBlob();
+        var queue = new Queue<int>();
+
+        for (var by = 0; by < gridHeight; by++)
+        {
+            for (var bx = 0; bx < gridWidth; bx++)
+            {
+                var index = BlockIndex(bx, by);
+                if (visitedBlocks[index] || !movingBlocks[index])
+                {
+                    continue;
+                }
+
+                var current = FloodFillBlob(bx, by, queue);
+                if (current.Count > largest.Count)
+                {
+                    largest = current;
+                }
+            }
+        }
+
+        if (largest.Count > 0)
+        {
+            foreach (var blockIndex in largest.BlockIndices)
+            {
+                largestBlobBlocks[blockIndex] = true;
+            }
+        }
+
+        return largest;
+    }
+
+    private MotionBlob FloodFillBlob(int startX, int startY, Queue<int> queue)
+    {
+        var blob = new MotionBlob();
+        queue.Clear();
+        queue.Enqueue(BlockIndex(startX, startY));
+        visitedBlocks[BlockIndex(startX, startY)] = true;
+
+        while (queue.Count > 0)
+        {
+            var index = queue.Dequeue();
+            var bx = index % gridWidth;
+            var by = index / gridWidth;
+
+            blob.Add(index, bx, by);
+
+            for (var oy = -1; oy <= 1; oy++)
+            {
+                for (var ox = -1; ox <= 1; ox++)
+                {
+                    if (ox == 0 && oy == 0)
+                    {
+                        continue;
+                    }
+
+                    var nx = bx + ox;
+                    var ny = by + oy;
+                    if (nx < 0 || nx >= gridWidth || ny < 0 || ny >= gridHeight)
+                    {
+                        continue;
+                    }
+
+                    var nextIndex = BlockIndex(nx, ny);
+                    if (visitedBlocks[nextIndex] || !movingBlocks[nextIndex])
+                    {
+                        continue;
+                    }
+
+                    visitedBlocks[nextIndex] = true;
+                    queue.Enqueue(nextIndex);
+                }
+            }
+        }
+
+        return blob;
+    }
+
+    private bool IsMovingPixel(int index)
+    {
+        var current = currentPixels[index];
+        var previous = previousPixels[index];
+        var difference = Mathf.Abs(current.r - previous.r) + Mathf.Abs(current.g - previous.g) + Mathf.Abs(current.b - previous.b);
+        return difference >= motionThreshold;
+    }
+
+    private void DrawMotionPreview(MotionBlob blob)
+    {
+        for (var i = 0; i < binaryPixels.Length; i++)
+        {
+            binaryPixels[i] = new Color32(0, 0, 0, 255);
+        }
+
+        for (var by = 0; by < gridHeight; by++)
+        {
+            for (var bx = 0; bx < gridWidth; bx++)
+            {
+                var blockIndex = BlockIndex(bx, by);
+                if (!movingBlocks[blockIndex])
+                {
+                    continue;
+                }
+
+                var color = largestBlobBlocks[blockIndex]
+                    ? new Color32(255, 255, 255, 255)
+                    : new Color32(70, 70, 70, 255);
+
+                FillPreviewBlock(bx, by, color);
+            }
+        }
+
+        if (blob.Count >= minBlobBlocks)
+        {
+            DrawBlobFrame(blob);
         }
 
         binaryPreviewTexture.SetPixels32(binaryPixels);
         binaryPreviewTexture.Apply(false);
     }
 
-    private float CalculateZoneScore(float minNormalizedX, float maxNormalizedX)
+    private void FillPreviewBlock(int bx, int by, Color32 color)
     {
-        if (!backgroundReady)
+        var startX = bx * blockSize;
+        var startY = by * blockSize;
+        var endX = Mathf.Min(startX + blockSize, cachedWidth);
+        var endY = Mathf.Min(startY + blockSize, cachedHeight);
+
+        for (var y = startY; y < endY; y++)
         {
-            return 0f;
-        }
-
-        var minX = Mathf.Clamp(Mathf.FloorToInt(cachedWidth * minNormalizedX), 0, cachedWidth - 1);
-        var maxX = Mathf.Clamp(Mathf.CeilToInt(cachedWidth * maxNormalizedX), minX + 1, cachedWidth);
-        var minY = Mathf.Clamp(Mathf.FloorToInt(cachedHeight * 0.28f), 0, cachedHeight - 1);
-        var maxY = Mathf.Clamp(Mathf.CeilToInt(cachedHeight * 0.96f), minY + 1, cachedHeight);
-
-        var total = 0;
-        var foreground = 0;
-        var highForeground = 0;
-
-        for (var y = minY; y < maxY; y += pixelStep)
-        {
-            var heightWeight = Mathf.InverseLerp(minY, maxY, y);
-            for (var x = minX; x < maxX; x += pixelStep)
+            for (var x = startX; x < endX; x++)
             {
-                var sourceX = mirrorPreview ? cachedWidth - 1 - x : x;
-                var index = y * cachedWidth + sourceX;
-                total++;
-
-                if (!IsForeground(index))
-                {
-                    continue;
-                }
-
-                foreground++;
-                if (heightWeight > 0.46f)
-                {
-                    highForeground++;
-                }
+                binaryPixels[y * cachedWidth + x] = color;
             }
         }
+    }
 
-        if (total <= 0 || foreground < 14)
+    private void DrawBlobFrame(MotionBlob blob)
+    {
+        var minX = Mathf.Clamp(blob.MinX * blockSize, 0, cachedWidth - 1);
+        var maxX = Mathf.Clamp((blob.MaxX + 1) * blockSize - 1, 0, cachedWidth - 1);
+        var minY = Mathf.Clamp(blob.MinY * blockSize, 0, cachedHeight - 1);
+        var maxY = Mathf.Clamp((blob.MaxY + 1) * blockSize - 1, 0, cachedHeight - 1);
+        var frameColor = new Color32(255, 255, 255, 255);
+
+        for (var x = minX; x <= maxX; x++)
         {
-            return 0f;
+            binaryPixels[minY * cachedWidth + x] = frameColor;
+            binaryPixels[maxY * cachedWidth + x] = frameColor;
         }
 
-        var foregroundRatio = (float)foreground / total;
-        var highRatio = (float)highForeground / total;
-        return foregroundRatio + highRatio * 0.85f;
-    }
-
-    private bool IsForeground(int index)
-    {
-        if (!backgroundReady || index < 0 || index >= currentPixels.Length)
+        for (var y = minY; y <= maxY; y++)
         {
-            return false;
+            binaryPixels[y * cachedWidth + minX] = frameColor;
+            binaryPixels[y * cachedWidth + maxX] = frameColor;
         }
-
-        var current = currentPixels[index];
-        var background = backgroundPixels[index];
-        var difference = Mathf.Abs(current.r - background.r) + Mathf.Abs(current.g - background.g) + Mathf.Abs(current.b - background.b);
-        return difference >= backgroundDifferenceThreshold;
     }
 
-    private byte GetGray(Color32 color)
+    private void ClearPreview()
     {
-        return (byte)((color.r * 30 + color.g * 59 + color.b * 11) / 100);
-    }
-
-    private void CaptureTemplate(FinalGestureZone zone)
-    {
-        if (!backgroundReady || binaryPixels == null)
+        if (binaryPreviewTexture == null || binaryPixels == null)
         {
             return;
         }
 
-        var template = BuildReducedMask();
-        if (zone == FinalGestureZone.Left)
+        for (var i = 0; i < binaryPixels.Length; i++)
         {
-            leftTemplate = template;
+            binaryPixels[i] = new Color32(0, 0, 0, 255);
         }
-        else if (zone == FinalGestureZone.Center)
-        {
-            centerTemplate = template;
-        }
-        else if (zone == FinalGestureZone.Right)
-        {
-            rightTemplate = template;
-        }
+
+        binaryPreviewTexture.SetPixels32(binaryPixels);
+        binaryPreviewTexture.Apply(false);
     }
 
-    private byte[] BuildReducedMask()
+    private int BlockIndex(int x, int y)
     {
-        var mask = new byte[TemplateWidth * TemplateHeight];
-        for (var ty = 0; ty < TemplateHeight; ty++)
-        {
-            var y0 = Mathf.FloorToInt((float)ty / TemplateHeight * cachedHeight);
-            var y1 = Mathf.FloorToInt((float)(ty + 1) / TemplateHeight * cachedHeight);
-            for (var tx = 0; tx < TemplateWidth; tx++)
-            {
-                var x0 = Mathf.FloorToInt((float)tx / TemplateWidth * cachedWidth);
-                var x1 = Mathf.FloorToInt((float)(tx + 1) / TemplateWidth * cachedWidth);
-                var total = 0;
-                var filled = 0;
-
-                for (var y = y0; y < y1; y += 2)
-                {
-                    for (var x = x0; x < x1; x += 2)
-                    {
-                        var sourceX = mirrorPreview ? cachedWidth - 1 - x : x;
-                        var index = y * cachedWidth + sourceX;
-                        total++;
-                        if (IsForeground(index))
-                        {
-                            filled++;
-                        }
-                    }
-                }
-
-                mask[ty * TemplateWidth + tx] = total == 0 ? (byte)0 : (byte)Mathf.Clamp(filled * 255 / total, 0, 255);
-            }
-        }
-
-        return mask;
-    }
-
-    private void AddTemplateScores(ref float newLeftScore, ref float newCenterScore, ref float newRightScore)
-    {
-        var currentMask = BuildReducedMask();
-        if (leftTemplate != null)
-        {
-            newLeftScore += CompareTemplate(currentMask, leftTemplate) * 0.025f;
-        }
-
-        if (centerTemplate != null)
-        {
-            newCenterScore += CompareTemplate(currentMask, centerTemplate) * 0.025f;
-        }
-
-        if (rightTemplate != null)
-        {
-            newRightScore += CompareTemplate(currentMask, rightTemplate) * 0.025f;
-        }
-    }
-
-    private float CompareTemplate(byte[] currentMask, byte[] template)
-    {
-        if (currentMask == null || template == null || currentMask.Length != template.Length)
-        {
-            return 0f;
-        }
-
-        var difference = 0f;
-        var templateMass = 0f;
-        for (var i = 0; i < currentMask.Length; i++)
-        {
-            difference += Mathf.Abs(currentMask[i] - template[i]) / 255f;
-            templateMass += template[i] / 255f;
-        }
-
-        if (templateMass < 2f)
-        {
-            return 0f;
-        }
-
-        return Mathf.Clamp01(1f - difference / currentMask.Length);
-    }
-
-    private FinalGestureZone ChooseActiveZone()
-    {
-        var bestZone = FinalGestureZone.Left;
-        var bestScore = leftScore;
-        var secondScore = Mathf.Max(centerScore, rightScore);
-
-        if (centerScore > bestScore)
-        {
-            bestZone = FinalGestureZone.Center;
-            bestScore = centerScore;
-            secondScore = Mathf.Max(leftScore, rightScore);
-        }
-
-        if (rightScore > bestScore)
-        {
-            bestZone = FinalGestureZone.Right;
-            bestScore = rightScore;
-            secondScore = Mathf.Max(leftScore, centerScore);
-        }
-
-        if (bestScore < activationThreshold || bestScore - secondScore < confidenceGap)
-        {
-            return FinalGestureZone.None;
-        }
-
-        return bestZone;
+        return y * gridWidth + x;
     }
 
     private void UpdateHeldZone()
@@ -575,16 +553,47 @@ public class FinalWebcamGestureInput : MonoBehaviour
             return;
         }
 
-        if (capturingBackground)
-        {
-            statusText.text = "Снимок фона: уберите руки из кадра на секунду";
-            return;
-        }
-
         var zone = activeZone == FinalGestureZone.Left ? "левая зона" :
             activeZone == FinalGestureZone.Center ? "центр" :
-            activeZone == FinalGestureZone.Right ? "правая зона" : "рука не найдена";
+            activeZone == FinalGestureZone.Right ? "правая зона" : "движение руки не найдено";
 
-        statusText.text = "Чёрно-белый AR режим: " + zone + ". B фон, F1/F2/F3 образцы.";
+        statusText.text = "Чёрно-белый AR режим: " + zone + ". Поднимите и слегка пошевелите рукой.";
+    }
+
+    private struct MotionBlob
+    {
+        public int Count;
+        public int MinX;
+        public int MaxX;
+        public int MinY;
+        public int MaxY;
+        public float CenterX => Count <= 0 ? 0f : sumX / Count;
+
+        public List<int> BlockIndices => blockIndices ?? (blockIndices = new List<int>());
+
+        private int sumX;
+        private List<int> blockIndices;
+
+        public void Add(int index, int x, int y)
+        {
+            if (Count == 0)
+            {
+                MinX = x;
+                MaxX = x;
+                MinY = y;
+                MaxY = y;
+            }
+            else
+            {
+                MinX = Mathf.Min(MinX, x);
+                MaxX = Mathf.Max(MaxX, x);
+                MinY = Mathf.Min(MinY, y);
+                MaxY = Mathf.Max(MaxY, y);
+            }
+
+            Count++;
+            sumX += x;
+            BlockIndices.Add(index);
+        }
     }
 }

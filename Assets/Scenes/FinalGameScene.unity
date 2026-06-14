@@ -133,6 +133,7 @@ GameObject:
   m_Component:
   - component: {fileID: 200001}
   - component: {fileID: 200002}
+  - component: {fileID: 200003}
   m_Layer: 0
   m_Name: Final Game Controller
   m_TagString: Untagged
@@ -179,6 +180,34 @@ MonoBehaviour:
   enemyMoveSpeed: 3.95
   arenaSize: {x: 42, y: 24}
   gestureHoldTime: 0.8
+  cameraOffset: {x: 0, y: 4.3, z: -7.4}
+  cameraFollowSpeed: 7
+  cameraLookHeight: 1.2
+  cameraFollowsPlayerRotation: 1
+--- !u!114 &200003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 42ad4f0f8fe146f9a3e513fd3dd0a111, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  previewImage: {fileID: 0}
+  statusText: {fileID: 0}
+  mirrorPreview: 1
+  sampleInterval: 0.05
+  requestedWidth: 640
+  requestedHeight: 360
+  requestedFps: 30
+  motionThreshold: 42
+  blockSize: 8
+  minChangedPixelsPerBlock: 8
+  minBlobBlocks: 5
+  zoneLatchSeconds: 1.1
 --- !u!1 &300000
 GameObject:
   m_ObjectHideFlags: 0
