@@ -1890,8 +1890,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 77fb17c5dab74a248a1dafd1b67c5af3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   target: {fileID: 904069538}
   offset: {x: 0, y: 4, z: -7}
   followSpeed: 7
@@ -2827,34 +2827,17 @@ MonoBehaviour:
   requestedWidth: 640
   requestedHeight: 480
   requestedFps: 30
-  brightThreshold: 140
-  sampleStep: 4
-  minMarkerSize: 0.12
-  maxMarkerSize: 0.9
-  minMarkerDensity: 0.42
-  maxDarkMarkerDensity: 0.18
-  markerDistanceFromCamera: 7.2
-  gameScaleAtMarker: 0.055
-  gameplayWorldSize: 28
-  gameplayWorldWidth: 28
-  gameplayWorldDepth: 28
-  paperCoverage: 0.72
-  minGameScale: 0.006
-  maxGameScale: 0.07
-  maxSurroundingBrightDensity: 0.42
-  minBorderContrast: 14
-  minCornerFill: 0.34
-  markerPlaneLift: 0.04
-  followSharpness: 8
-  markerLostDelay: 1.25
+  brightThreshold: 135
+  sampleStep: 6
+  minMarkerSize: 0.1
+  maxMarkerSize: 0.92
+  minWhiteArea: 0.025
+  minMarkerDensity: 0.32
+  stableFramesToShow: 3
+  markerLostDelay: 1.2
+  keepGameVisibleAfterTrigger: 1
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"
   setupSceneAutomatically: 1
-  placeGameOnCameraFacingPaper: 1
-  freezePhysicsInMarkerMode: 0
-  useGravityInMarkerMode: 0
-  fitGameplayToPaperAspect: 1
-  lockAnchorAfterPlacement: 1
-  stableMarkerFramesBeforePlacement: 4
-  markerSmoothingSharpness: 4
-  arCameraPosition: {x: 0, y: 2.8, z: -2.5}
-  arCameraRotation: {x: 14, y: 0, z: 0}
+  gameRootPosition: {x: 0, y: 0, z: 0}
+  gameRootRotation: {x: 0, y: 0, z: 0}
+  gameRootScale: {x: 1, y: 1, z: 1}

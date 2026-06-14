@@ -10,7 +10,6 @@ public class EnemyRobotChaser : MonoBehaviour
     [SerializeField] private float moveSpeed = 3.25f;
     [SerializeField] private float rotationSpeed = 9f;
     [SerializeField] private float stopDistance = 0.08f;
-    [SerializeField] private bool scaleMovementWithParent = true;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
     [SerializeField] private string movingParameter = "IsMoving";
@@ -69,7 +68,7 @@ public class EnemyRobotChaser : MonoBehaviour
         var targetRotation = Quaternion.LookRotation(moveDirection, Vector3.up);
         enemyRigidbody.MoveRotation(Quaternion.Slerp(enemyRigidbody.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
 
-        var nextPosition = enemyRigidbody.position + moveDirection * GetScaledMoveSpeed() * Time.fixedDeltaTime;
+        var nextPosition = enemyRigidbody.position + moveDirection * moveSpeed * Time.fixedDeltaTime;
         enemyRigidbody.MovePosition(nextPosition);
         SetAnimationSpeed(moveSpeed);
     }
@@ -92,18 +91,6 @@ public class EnemyRobotChaser : MonoBehaviour
 
         animator.SetFloat(speedParameter, speed);
         animator.SetBool(movingParameter, speed > 0.08f);
-    }
-
-    private float GetScaledMoveSpeed()
-    {
-        if (!scaleMovementWithParent || transform.parent == null)
-        {
-            return moveSpeed;
-        }
-
-        var parentScale = transform.parent.lossyScale;
-        var horizontalScale = (Mathf.Abs(parentScale.x) + Mathf.Abs(parentScale.z)) * 0.5f;
-        return moveSpeed * Mathf.Max(0.01f, horizontalScale);
     }
 
     private void ApplyColor(Color color)
