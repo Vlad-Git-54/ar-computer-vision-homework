@@ -13,6 +13,13 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedFps = 30;
     [SerializeField] private int brightThreshold = 128;
     [SerializeField] private int sampleStep = 6;
+    [SerializeField] private int checkerColumns = 6;
+    [SerializeField] private int checkerRows = 4;
+    [SerializeField] private int checkerSearchStride = 5;
+    [SerializeField] private int minCheckerContrast = 42;
+    [SerializeField] private float minCheckerScore = 0.72f;
+    [SerializeField] private float minCheckerSize = 0.08f;
+    [SerializeField] private float maxCheckerSize = 0.92f;
     [SerializeField] private float minMarkerSize = 0.1f;
     [SerializeField] private float maxMarkerSize = 0.92f;
     [SerializeField] private float minWhiteArea = 0.035f;
@@ -23,11 +30,17 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int stableFramesToShow = 4;
     [SerializeField] private float markerLostDelay = 2f;
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
-    [SerializeField] private string markerHelpText = "Маркер: белый лист А4";
+    [SerializeField] private string markerHelpText = "Маркер: шахматная доска 6 x 4 из двух А4";
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 gameRootPosition = Vector3.zero;
     [SerializeField] private Vector3 gameRootRotation = Vector3.zero;
     [SerializeField] private Vector3 gameRootScale = Vector3.one;
+    [SerializeField] private float fallbackGameplayWidth = 24f;
+    [SerializeField] private float fallbackGameplayDepth = 18f;
+    [SerializeField] private float markerGamePadding = 0.86f;
+    [SerializeField] private float minMarkerGameScale = 0.01f;
+    [SerializeField] private float maxMarkerGameScale = 1.1f;
+    [SerializeField] private float markerPlacementSmoothness = 10f;
 
     private WebCamTexture webcamTexture;
     private Color32[] cameraPixels;
@@ -47,6 +60,11 @@ public class WebcamMarkerGameController : MonoBehaviour
     private int stableMarkerFrames;
     private float lastMarkerFoundTime = -10f;
     private float lastDetectionErrorLogTime = -10f;
+    private int currentMarkerGridWidth;
+    private int currentMarkerGridHeight;
+    private CheckerboardMarkerCandidate lastCheckerboardCandidate;
+    private Bounds gameRootLocalBounds;
+    private bool gameRootBoundsReady;
     private string lastDetectionHint = "";
     private Sprite whiteSprite;
 
@@ -62,6 +80,17 @@ public class WebcamMarkerGameController : MonoBehaviour
         public float CenterFill;
         public float CornerFill;
         public float LuminanceDeviation;
+    }
+
+    private struct CheckerboardMarkerCandidate
+    {
+        public bool Found;
+        public float Score;
+        public float Contrast;
+        public int MinGridX;
+        public int MaxGridX;
+        public int MinGridY;
+        public int MaxGridY;
     }
 
     private void Awake()
@@ -84,7 +113,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         StartWebcam();
         SetGameVisible(false, true);
         SetMarkerPause(true);
-        UpdateStatus(false, "Поднесите белый лист А4 к веб-камере");
+        UpdateStatus(false, "Поднесите шахматную доску 6 x 4 к веб-камере");
     }
 
     private void Update()
@@ -116,11 +145,12 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         if (shouldShowGame)
         {
-            UpdateStatus(true, "Лист А4 найден, обычная игра запущена");
+            PlaceGameOnMarker(lastCheckerboardCandidate, false);
+            UpdateStatus(true, "Шахматный маркер найден, игра размещена по его границам");
             return;
         }
 
-        var waitingMessage = markerWasFound ? "Лист потерян, покажите его камере снова" : "Поднесите белый лист А4 к веб-камере";
+        var waitingMessage = markerWasFound ? "Маркер потерян, покажите шахматную доску снова" : "Поднесите шахматную доску 6 x 4 к веб-камере";
         if (!string.IsNullOrEmpty(lastDetectionHint))
         {
             waitingMessage += ". " + lastDetectionHint;
@@ -131,12 +161,13 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private void UpdateMarkerTrigger()
     {
-        var markerFound = DetectWhiteSheetSafely();
+        var markerFound = DetectCheckerboardMarkerSafely(out var markerCandidate);
         if (markerFound)
         {
             markerWasFound = true;
             stableMarkerFrames++;
             lastMarkerFoundTime = Time.unscaledTime;
+            lastCheckerboardCandidate = markerCandidate;
         }
         else if (Time.unscaledTime - lastMarkerFoundTime > markerLostDelay)
         {
@@ -146,22 +177,23 @@ public class WebcamMarkerGameController : MonoBehaviour
         if (stableMarkerFrames >= stableFramesToShow)
         {
             gameTriggered = true;
-            PlaceGameNormally();
+            PlaceGameOnMarker(lastCheckerboardCandidate, !gameVisible);
         }
     }
 
-    private bool DetectWhiteSheetSafely()
+    private bool DetectCheckerboardMarkerSafely(out CheckerboardMarkerCandidate markerCandidate)
     {
         try
         {
-            return DetectWhiteSheet();
+            return DetectCheckerboardMarker(out markerCandidate);
         }
         catch (Exception exception)
         {
+            markerCandidate = new CheckerboardMarkerCandidate();
             if (Time.unscaledTime - lastDetectionErrorLogTime > 1f)
             {
                 lastDetectionErrorLogTime = Time.unscaledTime;
-                Debug.LogWarning("Кадр камеры пропущен из-за ошибки распознавания листа: " + exception.Message);
+                Debug.LogWarning("Кадр камеры пропущен из-за ошибки распознавания шахматного маркера: " + exception.Message);
             }
 
             return false;
@@ -231,6 +263,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         gameRoot = rootObject.transform;
+        CacheGameRootBounds();
     }
 
     private bool ShouldMoveToGameRoot(string objectName)
@@ -264,9 +297,128 @@ public class WebcamMarkerGameController : MonoBehaviour
             return;
         }
 
+        CacheGameRootBounds();
         gameRoot.position = gameRootPosition;
         gameRoot.rotation = Quaternion.Euler(gameRootRotation);
         gameRoot.localScale = gameRootScale;
+    }
+
+    private void PlaceGameOnMarker(CheckerboardMarkerCandidate markerCandidate, bool immediate)
+    {
+        if (gameRoot == null || sceneCamera == null || !markerCandidate.Found)
+        {
+            return;
+        }
+
+        CacheGameRootBounds();
+
+        var gridWidth = Mathf.Max(1, currentMarkerGridWidth);
+        var gridHeight = Mathf.Max(1, currentMarkerGridHeight);
+        var minScreenX = markerCandidate.MinGridX / (float)gridWidth;
+        var maxScreenX = markerCandidate.MaxGridX / (float)gridWidth;
+        var minScreenY = markerCandidate.MinGridY / (float)gridHeight;
+        var maxScreenY = markerCandidate.MaxGridY / (float)gridHeight;
+        var centerScreenX = (minScreenX + maxScreenX) * 0.5f;
+        var centerScreenY = (minScreenY + maxScreenY) * 0.5f;
+
+        if (!TryScreenPointToGround(centerScreenX, centerScreenY, out var markerCenter)
+            || !TryScreenPointToGround(minScreenX, centerScreenY, out var markerLeft)
+            || !TryScreenPointToGround(maxScreenX, centerScreenY, out var markerRight)
+            || !TryScreenPointToGround(centerScreenX, minScreenY, out var markerBottom)
+            || !TryScreenPointToGround(centerScreenX, maxScreenY, out var markerTop))
+        {
+            return;
+        }
+
+        var markerWorldWidth = Vector3.Distance(markerLeft, markerRight);
+        var markerWorldDepth = Vector3.Distance(markerBottom, markerTop);
+        var baseWidth = Mathf.Max(0.1f, gameRootBoundsReady ? gameRootLocalBounds.size.x : fallbackGameplayWidth);
+        var baseDepth = Mathf.Max(0.1f, gameRootBoundsReady ? gameRootLocalBounds.size.z : fallbackGameplayDepth);
+        var scaleValue = Mathf.Min(markerWorldWidth / baseWidth, markerWorldDepth / baseDepth) * markerGamePadding;
+        scaleValue = Mathf.Clamp(scaleValue, minMarkerGameScale, maxMarkerGameScale);
+
+        var targetScale = new Vector3(gameRootScale.x * scaleValue, gameRootScale.y * scaleValue, gameRootScale.z * scaleValue);
+        var targetRotation = Quaternion.Euler(gameRootRotation);
+        var scaledBoundsCenter = Vector3.Scale(gameRootBoundsReady ? gameRootLocalBounds.center : Vector3.zero, targetScale);
+        scaledBoundsCenter.y = 0f;
+        var targetPosition = new Vector3(markerCenter.x, gameRootPosition.y, markerCenter.z) - targetRotation * scaledBoundsCenter;
+        targetPosition.y = gameRootPosition.y;
+
+        if (immediate)
+        {
+            gameRoot.position = targetPosition;
+            gameRoot.rotation = targetRotation;
+            gameRoot.localScale = targetScale;
+            return;
+        }
+
+        var t = Mathf.Clamp01(markerPlacementSmoothness * Time.unscaledDeltaTime);
+        gameRoot.position = Vector3.Lerp(gameRoot.position, targetPosition, t);
+        gameRoot.rotation = Quaternion.Slerp(gameRoot.rotation, targetRotation, t);
+        gameRoot.localScale = Vector3.Lerp(gameRoot.localScale, targetScale, t);
+    }
+
+    private bool TryScreenPointToGround(float normalizedX, float normalizedY, out Vector3 worldPoint)
+    {
+        worldPoint = Vector3.zero;
+        var screenPoint = new Vector3(normalizedX * Screen.width, normalizedY * Screen.height, 0f);
+        var ray = sceneCamera.ScreenPointToRay(screenPoint);
+        var groundPlane = new Plane(Vector3.up, new Vector3(0f, gameRootPosition.y, 0f));
+        if (!groundPlane.Raycast(ray, out var enter))
+        {
+            return false;
+        }
+
+        worldPoint = ray.GetPoint(enter);
+        return true;
+    }
+
+    private void CacheGameRootBounds()
+    {
+        if (gameRoot == null)
+        {
+            return;
+        }
+
+        var renderers = gameRoot.GetComponentsInChildren<Renderer>(true);
+        var foundRenderer = false;
+        var localBounds = new Bounds(Vector3.zero, Vector3.zero);
+
+        foreach (var currentRenderer in renderers)
+        {
+            if (currentRenderer == null)
+            {
+                continue;
+            }
+
+            var rendererBounds = currentRenderer.bounds;
+            for (var cornerIndex = 0; cornerIndex < 8; cornerIndex++)
+            {
+                var corner = new Vector3(
+                    (cornerIndex & 1) == 0 ? rendererBounds.min.x : rendererBounds.max.x,
+                    (cornerIndex & 2) == 0 ? rendererBounds.min.y : rendererBounds.max.y,
+                    (cornerIndex & 4) == 0 ? rendererBounds.min.z : rendererBounds.max.z);
+                var localCorner = gameRoot.InverseTransformPoint(corner);
+
+                if (!foundRenderer)
+                {
+                    localBounds = new Bounds(localCorner, Vector3.zero);
+                    foundRenderer = true;
+                }
+                else
+                {
+                    localBounds.Encapsulate(localCorner);
+                }
+            }
+        }
+
+        if (!foundRenderer)
+        {
+            return;
+        }
+
+        gameRootLocalBounds = localBounds;
+        gameRootBoundsReady = true;
     }
 
     private void StartWebcam()
@@ -330,8 +482,9 @@ public class WebcamMarkerGameController : MonoBehaviour
         backgroundObject.transform.localScale = new Vector3(width, height, 1f);
     }
 
-    private bool DetectWhiteSheet()
+    private bool DetectCheckerboardMarker(out CheckerboardMarkerCandidate markerCandidate)
     {
+        markerCandidate = new CheckerboardMarkerCandidate();
         lastDetectionHint = "";
         if (webcamTexture == null || !webcamTexture.isPlaying || webcamTexture.width < 100 || webcamTexture.height < 100)
         {
@@ -352,8 +505,23 @@ public class WebcamMarkerGameController : MonoBehaviour
         var gridWidth = Mathf.Max(1, width / sampleStep);
         var gridHeight = Mathf.Max(1, height / sampleStep);
         var gridLength = gridWidth * gridHeight;
+        currentMarkerGridWidth = gridWidth;
+        currentMarkerGridHeight = gridHeight;
         EnsureMarkerGridSize(gridLength);
 
+        BuildLuminanceGrid(width, height, gridWidth, gridHeight);
+        markerCandidate = FindBestCheckerboardMarker(gridWidth, gridHeight);
+        var markerFound = markerCandidate.Found;
+        if (!markerFound)
+        {
+            lastDetectionHint = "Шахматная доска 6 x 4 пока не найдена";
+        }
+
+        return markerFound;
+    }
+
+    private void BuildLuminanceGrid(int width, int height, int gridWidth, int gridHeight)
+    {
         for (var gridY = 0; gridY < gridHeight; gridY++)
         {
             var y = gridY * sampleStep;
@@ -364,21 +532,146 @@ public class WebcamMarkerGameController : MonoBehaviour
                 var luminance = (color.r * 30 + color.g * 59 + color.b * 11) / 100;
                 var cellIndex = gridY * gridWidth + gridX;
                 luminanceCells[cellIndex] = (byte)Mathf.Clamp(luminance, 0, 255);
+            }
+        }
+    }
 
-                if (IsWhiteSheetPixel(color, luminance))
+    private CheckerboardMarkerCandidate FindBestCheckerboardMarker(int gridWidth, int gridHeight)
+    {
+        var bestCandidate = new CheckerboardMarkerCandidate();
+        var minWidth = Mathf.Max(checkerColumns * 2, Mathf.RoundToInt(gridWidth * minCheckerSize));
+        var maxWidth = Mathf.Max(minWidth, Mathf.RoundToInt(gridWidth * maxCheckerSize));
+        var scaleStep = Mathf.Max(3, gridWidth / 22);
+        var searchStride = Mathf.Max(2, checkerSearchStride);
+
+        SearchCheckerboardOrientation(gridWidth, gridHeight, checkerColumns, checkerRows, minWidth, maxWidth, scaleStep, searchStride, ref bestCandidate);
+        SearchCheckerboardOrientation(gridWidth, gridHeight, checkerRows, checkerColumns, minWidth, maxWidth, scaleStep, searchStride, ref bestCandidate);
+        return bestCandidate;
+    }
+
+    private void SearchCheckerboardOrientation(int gridWidth, int gridHeight, int columns, int rows, int minWidth, int maxWidth, int scaleStep, int searchStride, ref CheckerboardMarkerCandidate bestCandidate)
+    {
+        var aspect = columns / (float)Mathf.Max(1, rows);
+        for (var candidateWidth = minWidth; candidateWidth <= maxWidth; candidateWidth += scaleStep)
+        {
+            var candidateHeight = Mathf.RoundToInt(candidateWidth / aspect);
+            if (candidateHeight < rows * 2 || candidateHeight > gridHeight * maxCheckerSize)
+            {
+                continue;
+            }
+
+            for (var startY = 0; startY <= gridHeight - candidateHeight; startY += searchStride)
+            {
+                for (var startX = 0; startX <= gridWidth - candidateWidth; startX += searchStride)
                 {
-                    whiteCells[cellIndex] = 1;
+                    var candidate = ScoreCheckerboardCandidate(startX, startY, candidateWidth, candidateHeight, columns, rows);
+                    if (candidate.Found && candidate.Score > bestCandidate.Score)
+                    {
+                        bestCandidate = candidate;
+                    }
+                }
+            }
+        }
+    }
+
+    private CheckerboardMarkerCandidate ScoreCheckerboardCandidate(int startX, int startY, int candidateWidth, int candidateHeight, int columns, int rows)
+    {
+        var normalScore = ScoreCheckerboardOrientation(startX, startY, candidateWidth, candidateHeight, columns, rows, true, out var normalContrast);
+        var invertedScore = ScoreCheckerboardOrientation(startX, startY, candidateWidth, candidateHeight, columns, rows, false, out var invertedContrast);
+        var score = normalScore >= invertedScore ? normalScore : invertedScore;
+        var contrast = normalScore >= invertedScore ? normalContrast : invertedContrast;
+
+        return new CheckerboardMarkerCandidate
+        {
+            Found = score >= minCheckerScore && contrast >= minCheckerContrast,
+            Score = score,
+            Contrast = contrast,
+            MinGridX = startX,
+            MaxGridX = startX + candidateWidth,
+            MinGridY = startY,
+            MaxGridY = startY + candidateHeight
+        };
+    }
+
+    private float ScoreCheckerboardOrientation(int startX, int startY, int candidateWidth, int candidateHeight, int columns, int rows, bool topLeftDark, out float contrast)
+    {
+        var darkSum = 0f;
+        var lightSum = 0f;
+        var darkCount = 0;
+        var lightCount = 0;
+
+        for (var row = 0; row < rows; row++)
+        {
+            for (var column = 0; column < columns; column++)
+            {
+                var sampleX = startX + Mathf.RoundToInt((column + 0.5f) * candidateWidth / columns);
+                var sampleY = startY + Mathf.RoundToInt((row + 0.5f) * candidateHeight / rows);
+                var luminance = ReadGridLuminance(sampleX, sampleY);
+                var shouldBeDark = ((row + column) % 2 == 0) == topLeftDark;
+
+                if (shouldBeDark)
+                {
+                    darkSum += luminance;
+                    darkCount++;
+                }
+                else
+                {
+                    lightSum += luminance;
+                    lightCount++;
                 }
             }
         }
 
-        var markerFound = FindBestWhiteSheetComponent(gridWidth, gridHeight);
-        if (!markerFound)
+        var darkAverage = darkSum / Mathf.Max(1, darkCount);
+        var lightAverage = lightSum / Mathf.Max(1, lightCount);
+        contrast = lightAverage - darkAverage;
+        if (contrast <= 0f)
         {
-            lastDetectionHint = "Белый лист пока не найден";
+            return 0f;
         }
 
-        return markerFound;
+        var threshold = (darkAverage + lightAverage) * 0.5f;
+        var matches = 0;
+        var total = Mathf.Max(1, columns * rows);
+
+        for (var row = 0; row < rows; row++)
+        {
+            for (var column = 0; column < columns; column++)
+            {
+                var sampleX = startX + Mathf.RoundToInt((column + 0.5f) * candidateWidth / columns);
+                var sampleY = startY + Mathf.RoundToInt((row + 0.5f) * candidateHeight / rows);
+                var luminance = ReadGridLuminance(sampleX, sampleY);
+                var shouldBeDark = ((row + column) % 2 == 0) == topLeftDark;
+
+                if (shouldBeDark && luminance < threshold)
+                {
+                    matches++;
+                }
+                else if (!shouldBeDark && luminance > threshold)
+                {
+                    matches++;
+                }
+            }
+        }
+
+        var patternScore = matches / (float)total;
+        var contrastScore = Mathf.Clamp01(contrast / 90f);
+        return patternScore * 0.8f + contrastScore * 0.2f;
+    }
+
+    private int ReadGridLuminance(int gridX, int gridY)
+    {
+        if (luminanceCells == null || luminanceCells.Length == 0)
+        {
+            return 0;
+        }
+
+        var gridWidth = Mathf.Max(1, currentMarkerGridWidth);
+        var gridHeight = Mathf.Max(1, currentMarkerGridHeight);
+        var safeX = Mathf.Clamp(gridX, 0, gridWidth - 1);
+        var safeY = Mathf.Clamp(gridY, 0, gridHeight - 1);
+        var index = Mathf.Clamp(safeY * gridWidth + safeX, 0, luminanceCells.Length - 1);
+        return luminanceCells[index];
     }
 
     private void EnsureMarkerGridSize(int gridLength)
@@ -723,7 +1016,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         canvasObject.AddComponent<GraphicRaycaster>();
 
         var panel = CreatePanel(canvasObject.transform);
-        statusText = CreateText("Marker Status", panel.transform, "Поднесите белый лист А4 к веб-камере", 24, FontStyle.Bold, Color.white);
+        statusText = CreateText("Marker Status", panel.transform, "Поднесите шахматную доску 6 x 4 к веб-камере", 24, FontStyle.Bold, Color.white);
         SetStretch(statusText.rectTransform, new Vector2(22f, 38f), new Vector2(22f, 12f));
 
         helpText = CreateText("Marker Help", panel.transform, markerHelpText, 18, FontStyle.Normal, new Color(0.82f, 0.9f, 1f, 1f));
