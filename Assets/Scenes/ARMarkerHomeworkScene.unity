@@ -2830,19 +2830,24 @@ MonoBehaviour:
   brightThreshold: 158
   sampleStep: 4
   minMarkerSize: 0.18
-  maxMarkerSize: 0.95
-  minMarkerDensity: 0.4
-  maxDarkMarkerDensity: 0.2
+  maxMarkerSize: 0.82
+  minMarkerDensity: 0.66
+  maxDarkMarkerDensity: 0.08
   markerDistanceFromCamera: 7.2
   gameScaleAtMarker: 0.055
   gameplayWorldSize: 28
-  paperCoverage: 0.64
-  minGameScale: 0.018
-  maxGameScale: 0.06
-  maxSurroundingBrightDensity: 0.34
+  paperCoverage: 0.72
+  minGameScale: 0.006
+  maxGameScale: 0.07
+  maxSurroundingBrightDensity: 0.22
+  minBorderContrast: 32
+  minCornerFill: 0.58
+  markerPlaneLift: 0.04
   followSharpness: 8
   markerLostDelay: 1.25
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"
   setupSceneAutomatically: 1
+  placeGameOnCameraFacingPaper: 1
+  freezePhysicsInMarkerMode: 1
   arCameraPosition: {x: 0, y: 2.8, z: -2.5}
   arCameraRotation: {x: 14, y: 0, z: 0}

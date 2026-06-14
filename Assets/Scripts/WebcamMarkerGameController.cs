@@ -24,10 +24,15 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float minGameScale = 0.018f;
     [SerializeField] private float maxGameScale = 0.06f;
     [SerializeField] private float maxSurroundingBrightDensity = 0.34f;
+    [SerializeField] private float minBorderContrast = 32f;
+    [SerializeField] private float minCornerFill = 0.58f;
+    [SerializeField] private float markerPlaneLift = 0.04f;
     [SerializeField] private float followSharpness = 8f;
     [SerializeField] private float markerLostDelay = 1.25f;
     [SerializeField] private string markerHelpText = "Маркер: чистый белый лист А4";
     [SerializeField] private bool setupSceneAutomatically = true;
+    [SerializeField] private bool placeGameOnCameraFacingPaper = true;
+    [SerializeField] private bool freezePhysicsInMarkerMode = true;
     [SerializeField] private Vector3 arCameraPosition = new Vector3(0f, 2.8f, -2.5f);
     [SerializeField] private Vector3 arCameraRotation = new Vector3(14f, 0f, 0f);
 
@@ -36,6 +41,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private byte[] brightMarkerCells;
     private byte[] smoothedBrightMarkerCells;
     private byte[] darkMarkerCells;
+    private byte[] luminanceMarkerCells;
     private byte[] visitedMarkerCells;
     private int[] componentQueue;
     private GameObject backgroundObject;
@@ -69,6 +75,8 @@ public class WebcamMarkerGameController : MonoBehaviour
         public float BrightDensity;
         public float DarkDensity;
         public float SurroundingBrightDensity;
+        public float BorderContrast;
+        public float CornerFill;
     }
 
     private void Awake()
@@ -306,6 +314,7 @@ public class WebcamMarkerGameController : MonoBehaviour
                 var color = ReadAverageCellColor(x, y, width, height);
                 var luminance = (color.r * 30 + color.g * 59 + color.b * 11) / 100;
                 var cellIndex = gridY * gridWidth + gridX;
+                luminanceMarkerCells[cellIndex] = (byte)Mathf.Clamp(luminance, 0, 255);
 
                 if (IsBrightMarkerPixel(color, luminance))
                 {
@@ -337,6 +346,7 @@ public class WebcamMarkerGameController : MonoBehaviour
             brightMarkerCells = new byte[gridLength];
             smoothedBrightMarkerCells = new byte[gridLength];
             darkMarkerCells = new byte[gridLength];
+            luminanceMarkerCells = new byte[gridLength];
             visitedMarkerCells = new byte[gridLength];
             componentQueue = new int[gridLength];
             return;
@@ -345,6 +355,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         Array.Clear(brightMarkerCells, 0, gridLength);
         Array.Clear(smoothedBrightMarkerCells, 0, gridLength);
         Array.Clear(darkMarkerCells, 0, gridLength);
+        Array.Clear(luminanceMarkerCells, 0, gridLength);
         Array.Clear(visitedMarkerCells, 0, gridLength);
     }
 
@@ -352,7 +363,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         var maxChannel = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
         var minChannel = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
-        return luminance >= brightThreshold && minChannel >= 96 && maxChannel - minChannel <= 92;
+        return luminance >= brightThreshold && minChannel >= 112 && maxChannel - minChannel <= 68;
     }
 
     private Color32 ReadAverageCellColor(int startX, int startY, int imageWidth, int imageHeight)
@@ -510,12 +521,19 @@ public class WebcamMarkerGameController : MonoBehaviour
         var area = Mathf.Max(1, width * height);
         var brightDensity = brightCount / (float)area;
         var darkDensity = CountDarkCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
-        var surroundingBrightDensity = CountBrightCellsAround(minX, maxX, minY, maxY, gridWidth, gridHeight) / (float)Mathf.Max(1, CountRingCells(minX, maxX, minY, maxY, gridWidth, gridHeight));
+        var ringCells = Mathf.Max(1, CountRingCells(minX, maxX, minY, maxY, gridWidth, gridHeight));
+        var surroundingBrightDensity = CountBrightCellsAround(minX, maxX, minY, maxY, gridWidth, gridHeight) / (float)ringCells;
+        var innerLuminance = CountLuminanceCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
+        var ringLuminance = CountLuminanceCellsAround(minX, maxX, minY, maxY, gridWidth, gridHeight) / (float)ringCells;
+        var borderContrast = innerLuminance - ringLuminance;
+        var cornerFill = CountCornerBrightFill(minX, maxX, minY, maxY, gridWidth) / (float)Mathf.Max(1, CountCornerCells(minX, maxX, minY, maxY));
 
         result.Found = brightCount >= 110
             && brightDensity >= minMarkerDensity
             && darkDensity <= maxDarkMarkerDensity
-            && surroundingBrightDensity <= maxSurroundingBrightDensity;
+            && surroundingBrightDensity <= maxSurroundingBrightDensity
+            && borderContrast >= minBorderContrast
+            && cornerFill >= minCornerFill;
         result.MinX = minX;
         result.MaxX = maxX;
         result.MinY = minY;
@@ -524,6 +542,8 @@ public class WebcamMarkerGameController : MonoBehaviour
         result.BrightDensity = brightDensity;
         result.DarkDensity = darkDensity;
         result.SurroundingBrightDensity = surroundingBrightDensity;
+        result.BorderContrast = borderContrast;
+        result.CornerFill = cornerFill;
         return result;
     }
 
@@ -547,6 +567,21 @@ public class WebcamMarkerGameController : MonoBehaviour
             for (var x = minX; x <= maxX; x++)
             {
                 count += darkMarkerCells[rowStart + x];
+            }
+        }
+
+        return count;
+    }
+
+    private int CountLuminanceCells(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        var count = 0;
+        for (var y = minY; y <= maxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = minX; x <= maxX; x++)
+            {
+                count += luminanceMarkerCells[rowStart + x];
             }
         }
 
@@ -578,6 +613,31 @@ public class WebcamMarkerGameController : MonoBehaviour
         return count;
     }
 
+    private int CountLuminanceCellsAround(int minX, int maxX, int minY, int maxY, int gridWidth, int gridHeight)
+    {
+        var count = 0;
+        var ringMinX = Mathf.Max(0, minX - 5);
+        var ringMaxX = Mathf.Min(gridWidth - 1, maxX + 5);
+        var ringMinY = Mathf.Max(0, minY - 5);
+        var ringMaxY = Mathf.Min(gridHeight - 1, maxY + 5);
+
+        for (var y = ringMinY; y <= ringMaxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = ringMinX; x <= ringMaxX; x++)
+            {
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY)
+                {
+                    continue;
+                }
+
+                count += luminanceMarkerCells[rowStart + x];
+            }
+        }
+
+        return count;
+    }
+
     private int CountRingCells(int minX, int maxX, int minY, int maxY, int gridWidth, int gridHeight)
     {
         var ringMinX = Mathf.Max(0, minX - 5);
@@ -590,17 +650,62 @@ public class WebcamMarkerGameController : MonoBehaviour
         return Mathf.Max(1, fullArea - innerArea);
     }
 
+    private int CountCornerBrightFill(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        var width = maxX - minX + 1;
+        var height = maxY - minY + 1;
+        var cornerWidth = Mathf.Max(2, Mathf.RoundToInt(width * 0.2f));
+        var cornerHeight = Mathf.Max(2, Mathf.RoundToInt(height * 0.2f));
+
+        return CountBrightCells(minX, minX + cornerWidth - 1, minY, minY + cornerHeight - 1, gridWidth)
+            + CountBrightCells(maxX - cornerWidth + 1, maxX, minY, minY + cornerHeight - 1, gridWidth)
+            + CountBrightCells(minX, minX + cornerWidth - 1, maxY - cornerHeight + 1, maxY, gridWidth)
+            + CountBrightCells(maxX - cornerWidth + 1, maxX, maxY - cornerHeight + 1, maxY, gridWidth);
+    }
+
+    private int CountCornerCells(int minX, int maxX, int minY, int maxY)
+    {
+        var width = maxX - minX + 1;
+        var height = maxY - minY + 1;
+        var cornerWidth = Mathf.Max(2, Mathf.RoundToInt(width * 0.2f));
+        var cornerHeight = Mathf.Max(2, Mathf.RoundToInt(height * 0.2f));
+        return cornerWidth * cornerHeight * 4;
+    }
+
+    private int CountBrightCells(int minX, int maxX, int minY, int maxY, int gridWidth)
+    {
+        var count = 0;
+        for (var y = minY; y <= maxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = minX; x <= maxX; x++)
+            {
+                count += brightMarkerCells[rowStart + x];
+            }
+        }
+
+        return count;
+    }
+
     private MarkerObservation CreateObservationFromComponent(BrightMarkerComponent component, int gridWidth, int imageWidth, int imageHeight)
     {
         var observation = new MarkerObservation();
+        var gridHeight = Mathf.Max(1, imageHeight / sampleStep);
         var width = Mathf.Max(1, component.MaxX - component.MinX + 1);
         var height = Mathf.Max(1, component.MaxY - component.MinY + 1);
         var aspect = width / (float)height;
         var markerWidth = width * sampleStep;
         var markerHeight = height * sampleStep;
         var markerSize = Mathf.Max(markerWidth / (float)imageWidth, markerHeight / (float)imageHeight);
+        var edgeMargin = 4;
 
-        if (markerSize < minMarkerSize || markerSize > maxMarkerSize || !IsA4AspectAccepted(aspect))
+        if (component.MinX <= edgeMargin
+            || component.MinY <= edgeMargin
+            || component.MaxX >= gridWidth - edgeMargin
+            || component.MaxY >= gridHeight - edgeMargin
+            || markerSize < minMarkerSize
+            || markerSize > maxMarkerSize
+            || !IsA4AspectAccepted(aspect))
         {
             return observation;
         }
@@ -618,15 +723,15 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        return Mathf.Abs(aspect - landscapeA4) <= 0.42f || Mathf.Abs(aspect - portraitA4) <= 0.24f;
+        return Mathf.Abs(aspect - landscapeA4) <= 0.18f || Mathf.Abs(aspect - portraitA4) <= 0.11f;
     }
 
     private float GetA4AspectScore(float aspect)
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.42f;
-        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.24f;
+        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.18f;
+        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.11f;
         return Mathf.Clamp01(Mathf.Max(landscapeScore, portraitScore));
     }
 
@@ -634,6 +739,12 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         var targetPosition = sceneCamera.ViewportToWorldPoint(new Vector3(marker.Center.x, marker.Center.y, markerDistanceFromCamera));
         var targetRotation = Quaternion.Euler(0f, sceneCamera.transform.eulerAngles.y, 0f);
+        if (placeGameOnCameraFacingPaper)
+        {
+            targetPosition += sceneCamera.transform.forward * markerPlaneLift;
+            targetRotation = Quaternion.LookRotation(sceneCamera.transform.up, -sceneCamera.transform.forward);
+        }
+
         var targetScale = CalculateGameScale(marker);
         var blend = 1f - Mathf.Exp(-followSharpness * Time.unscaledDeltaTime);
 
@@ -684,12 +795,14 @@ public class WebcamMarkerGameController : MonoBehaviour
             currentRigidbody.angularVelocity = Vector3.zero;
             if (visible)
             {
-                currentRigidbody.isKinematic = false;
-                currentRigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+                currentRigidbody.isKinematic = freezePhysicsInMarkerMode;
+                currentRigidbody.useGravity = !freezePhysicsInMarkerMode;
+                currentRigidbody.collisionDetectionMode = freezePhysicsInMarkerMode ? CollisionDetectionMode.Discrete : CollisionDetectionMode.Continuous;
             }
             else
             {
                 currentRigidbody.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                currentRigidbody.useGravity = false;
                 currentRigidbody.isKinematic = true;
             }
         }
