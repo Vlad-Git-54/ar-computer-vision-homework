@@ -19,6 +19,11 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float maxDarkMarkerDensity = 0.2f;
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
     [SerializeField] private float gameScaleAtMarker = 0.055f;
+    [SerializeField] private float gameplayWorldSize = 28f;
+    [SerializeField] private float paperCoverage = 0.64f;
+    [SerializeField] private float minGameScale = 0.018f;
+    [SerializeField] private float maxGameScale = 0.06f;
+    [SerializeField] private float maxSurroundingBrightDensity = 0.34f;
     [SerializeField] private float followSharpness = 8f;
     [SerializeField] private float markerLostDelay = 1.25f;
     [SerializeField] private string markerHelpText = "Маркер: чистый белый лист А4";
@@ -49,6 +54,8 @@ public class WebcamMarkerGameController : MonoBehaviour
         public Vector2 Center;
         public float Size;
         public float Density;
+        public float ViewportWidth;
+        public float ViewportHeight;
     }
 
     private struct BrightMarkerComponent
@@ -61,6 +68,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         public int BrightCount;
         public float BrightDensity;
         public float DarkDensity;
+        public float SurroundingBrightDensity;
     }
 
     private void Awake()
@@ -502,8 +510,12 @@ public class WebcamMarkerGameController : MonoBehaviour
         var area = Mathf.Max(1, width * height);
         var brightDensity = brightCount / (float)area;
         var darkDensity = CountDarkCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
+        var surroundingBrightDensity = CountBrightCellsAround(minX, maxX, minY, maxY, gridWidth, gridHeight) / (float)Mathf.Max(1, CountRingCells(minX, maxX, minY, maxY, gridWidth, gridHeight));
 
-        result.Found = brightCount >= 110 && brightDensity >= minMarkerDensity && darkDensity <= maxDarkMarkerDensity;
+        result.Found = brightCount >= 110
+            && brightDensity >= minMarkerDensity
+            && darkDensity <= maxDarkMarkerDensity
+            && surroundingBrightDensity <= maxSurroundingBrightDensity;
         result.MinX = minX;
         result.MaxX = maxX;
         result.MinY = minY;
@@ -511,6 +523,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         result.BrightCount = brightCount;
         result.BrightDensity = brightDensity;
         result.DarkDensity = darkDensity;
+        result.SurroundingBrightDensity = surroundingBrightDensity;
         return result;
     }
 
@@ -540,6 +553,43 @@ public class WebcamMarkerGameController : MonoBehaviour
         return count;
     }
 
+    private int CountBrightCellsAround(int minX, int maxX, int minY, int maxY, int gridWidth, int gridHeight)
+    {
+        var count = 0;
+        var ringMinX = Mathf.Max(0, minX - 5);
+        var ringMaxX = Mathf.Min(gridWidth - 1, maxX + 5);
+        var ringMinY = Mathf.Max(0, minY - 5);
+        var ringMaxY = Mathf.Min(gridHeight - 1, maxY + 5);
+
+        for (var y = ringMinY; y <= ringMaxY; y++)
+        {
+            var rowStart = y * gridWidth;
+            for (var x = ringMinX; x <= ringMaxX; x++)
+            {
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY)
+                {
+                    continue;
+                }
+
+                count += brightMarkerCells[rowStart + x];
+            }
+        }
+
+        return count;
+    }
+
+    private int CountRingCells(int minX, int maxX, int minY, int maxY, int gridWidth, int gridHeight)
+    {
+        var ringMinX = Mathf.Max(0, minX - 5);
+        var ringMaxX = Mathf.Min(gridWidth - 1, maxX + 5);
+        var ringMinY = Mathf.Max(0, minY - 5);
+        var ringMaxY = Mathf.Min(gridHeight - 1, maxY + 5);
+        var fullArea = (ringMaxX - ringMinX + 1) * (ringMaxY - ringMinY + 1);
+        var innerArea = (maxX - minX + 1) * (maxY - minY + 1);
+
+        return Mathf.Max(1, fullArea - innerArea);
+    }
+
     private MarkerObservation CreateObservationFromComponent(BrightMarkerComponent component, int gridWidth, int imageWidth, int imageHeight)
     {
         var observation = new MarkerObservation();
@@ -558,6 +608,8 @@ public class WebcamMarkerGameController : MonoBehaviour
         observation.Found = true;
         observation.Center = new Vector2((component.MinX + component.MaxX + 1f) * sampleStep * 0.5f / imageWidth, (component.MinY + component.MaxY + 1f) * sampleStep * 0.5f / imageHeight);
         observation.Size = markerSize;
+        observation.ViewportWidth = markerWidth / (float)imageWidth;
+        observation.ViewportHeight = markerHeight / (float)imageHeight;
         observation.Density = component.BrightDensity + component.DarkDensity;
         return observation;
     }
@@ -582,13 +634,24 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         var targetPosition = sceneCamera.ViewportToWorldPoint(new Vector3(marker.Center.x, marker.Center.y, markerDistanceFromCamera));
         var targetRotation = Quaternion.Euler(0f, sceneCamera.transform.eulerAngles.y, 0f);
-        var markerScale = Mathf.InverseLerp(minMarkerSize, maxMarkerSize, marker.Size);
-        var targetScale = gameScaleAtMarker * Mathf.Lerp(0.8f, 1.1f, markerScale);
+        var targetScale = CalculateGameScale(marker);
         var blend = 1f - Mathf.Exp(-followSharpness * Time.unscaledDeltaTime);
 
         gameRoot.position = Vector3.Lerp(gameRoot.position, targetPosition, blend);
         gameRoot.rotation = Quaternion.Slerp(gameRoot.rotation, targetRotation, blend);
         gameRoot.localScale = Vector3.Lerp(gameRoot.localScale, Vector3.one * targetScale, blend);
+    }
+
+    private float CalculateGameScale(MarkerObservation marker)
+    {
+        var viewportWorldHeight = 2f * markerDistanceFromCamera * Mathf.Tan(sceneCamera.fieldOfView * Mathf.Deg2Rad * 0.5f);
+        var viewportWorldWidth = viewportWorldHeight * sceneCamera.aspect;
+        var markerWorldWidth = Mathf.Max(0.01f, marker.ViewportWidth * viewportWorldWidth);
+        var markerWorldHeight = Mathf.Max(0.01f, marker.ViewportHeight * viewportWorldHeight);
+        var markerWorldSize = Mathf.Min(markerWorldWidth, markerWorldHeight);
+        var calculatedScale = markerWorldSize * paperCoverage / Mathf.Max(0.01f, gameplayWorldSize);
+
+        return Mathf.Clamp(calculatedScale, minGameScale, maxGameScale);
     }
 
     private void SetGameVisible(bool visible, bool force)
