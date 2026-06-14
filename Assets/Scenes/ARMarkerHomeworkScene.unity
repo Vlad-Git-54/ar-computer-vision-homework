@@ -780,10 +780,10 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   targetObjectName: Robot Player
-  moveSpeed: 0.9
-  rotationSpeed: 4.5
-  stopDistance: 0.75
-  startDelay: 3
+  moveSpeed: 2.4
+  rotationSpeed: 8
+  stopDistance: 0.05
+  startDelay: 1.5
   animator: {fileID: 0}
   speedParameter: MoveSpeed
   movingParameter: IsMoving
@@ -1742,7 +1742,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b26173aa7bc64a3448c84b7f49151aa3, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  moveSpeed: 0.9
+  moveSpeed: 2.4
   fallLoseHeight: -3
   rotateSpeed: 130
   animator: {fileID: 0}
@@ -2870,6 +2870,9 @@ MonoBehaviour:
   markerPlacementSmoothness: 6
   markerBoundsSmoothness: 8
   gameRenderLayer: 30
+  markerRenderTextureWidth: 1024
+  markerRenderTextureHeight: 768
+  markerOverlayDepth: 28
   markerViewportPadding: 0.92
   markerOverlayCameraPadding: 1.1
   markerOverlayCameraRotation: {x: 90, y: 0, z: 0}

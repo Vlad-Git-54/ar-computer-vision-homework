@@ -51,6 +51,9 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float markerPlacementSmoothness = 6f;
     [SerializeField] private float markerBoundsSmoothness = 8f;
     [SerializeField] private int gameRenderLayer = 30;
+    [SerializeField] private int markerRenderTextureWidth = 1024;
+    [SerializeField] private int markerRenderTextureHeight = 768;
+    [SerializeField] private float markerOverlayDepth = 28f;
     [SerializeField] private float markerViewportPadding = 0.92f;
     [SerializeField] private float markerOverlayCameraPadding = 1.1f;
     [SerializeField] private Vector3 markerOverlayCameraRotation = new Vector3(90f, 0f, 0f);
@@ -64,6 +67,10 @@ public class WebcamMarkerGameController : MonoBehaviour
     private GameObject backgroundObject;
     private Material backgroundMaterial;
     private Camera markerGameCamera;
+    private RenderTexture markerGameTexture;
+    private GameObject markerOverlayObject;
+    private Mesh markerOverlayMesh;
+    private Material markerOverlayMaterial;
     private Text statusText;
     private Text helpText;
     private bool gameVisible;
@@ -80,6 +87,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     private CheckerboardMarkerCandidate lastCheckerboardCandidate;
     private CheckerboardMarkerCandidate smoothedCheckerboardCandidate;
     private bool smoothedCheckerboardReady;
+    private readonly Vector2[] currentOverlayCorners = new Vector2[4];
+    private bool markerOverlayReady;
     private Bounds gameRootLocalBounds;
     private bool gameRootBoundsReady;
     private string lastDetectionHint = "";
@@ -108,6 +117,10 @@ public class WebcamMarkerGameController : MonoBehaviour
         public float MaxGridX;
         public float MinGridY;
         public float MaxGridY;
+        public Vector2 Corner0Grid;
+        public Vector2 Corner1Grid;
+        public Vector2 Corner2Grid;
+        public Vector2 Corner3Grid;
     }
 
     private struct CheckerContrastComponent
@@ -121,6 +134,10 @@ public class WebcamMarkerGameController : MonoBehaviour
         public float Density;
         public float Score;
         public float PatternScore;
+        public Vector2 Corner0Grid;
+        public Vector2 Corner1Grid;
+        public Vector2 Corner2Grid;
+        public Vector2 Corner3Grid;
     }
 
     private void Awake()
@@ -171,6 +188,7 @@ public class WebcamMarkerGameController : MonoBehaviour
             stableMarkerFrames = 0;
             gameTriggered = false;
             gamePlacedOnMarker = false;
+            markerOverlayReady = false;
         }
 
         SetGameVisible(shouldShowGame, false);
@@ -178,11 +196,8 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         if (shouldShowGame)
         {
-            if (!gamePlacedOnMarker)
-            {
-                PlaceGameOnMarker(lastCheckerboardCandidate, true);
-                gamePlacedOnMarker = true;
-            }
+            PlaceGameOnMarker(lastCheckerboardCandidate, !gamePlacedOnMarker);
+            gamePlacedOnMarker = true;
 
             UpdateStatus(true, "Шахматный маркер найден, игра размещена по его границам");
             return;
@@ -261,6 +276,10 @@ public class WebcamMarkerGameController : MonoBehaviour
         smoothedCheckerboardCandidate.MaxGridX = Mathf.Lerp(smoothedCheckerboardCandidate.MaxGridX, markerCandidate.MaxGridX, t);
         smoothedCheckerboardCandidate.MinGridY = Mathf.Lerp(smoothedCheckerboardCandidate.MinGridY, markerCandidate.MinGridY, t);
         smoothedCheckerboardCandidate.MaxGridY = Mathf.Lerp(smoothedCheckerboardCandidate.MaxGridY, markerCandidate.MaxGridY, t);
+        smoothedCheckerboardCandidate.Corner0Grid = Vector2.Lerp(smoothedCheckerboardCandidate.Corner0Grid, markerCandidate.Corner0Grid, t);
+        smoothedCheckerboardCandidate.Corner1Grid = Vector2.Lerp(smoothedCheckerboardCandidate.Corner1Grid, markerCandidate.Corner1Grid, t);
+        smoothedCheckerboardCandidate.Corner2Grid = Vector2.Lerp(smoothedCheckerboardCandidate.Corner2Grid, markerCandidate.Corner2Grid, t);
+        smoothedCheckerboardCandidate.Corner3Grid = Vector2.Lerp(smoothedCheckerboardCandidate.Corner3Grid, markerCandidate.Corner3Grid, t);
         return smoothedCheckerboardCandidate;
     }
 
@@ -281,7 +300,11 @@ public class WebcamMarkerGameController : MonoBehaviour
             MinGridX = minX * gridWidth,
             MaxGridX = maxX * gridWidth,
             MinGridY = minY * gridHeight,
-            MaxGridY = maxY * gridHeight
+            MaxGridY = maxY * gridHeight,
+            Corner0Grid = new Vector2(minX * gridWidth, minY * gridHeight),
+            Corner1Grid = new Vector2(maxX * gridWidth, minY * gridHeight),
+            Corner2Grid = new Vector2(maxX * gridWidth, maxY * gridHeight),
+            Corner3Grid = new Vector2(minX * gridWidth, maxY * gridHeight)
         };
     }
 
@@ -321,6 +344,19 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             Destroy(backgroundMaterial);
             backgroundMaterial = null;
+        }
+
+        if (markerOverlayMaterial != null)
+        {
+            Destroy(markerOverlayMaterial);
+            markerOverlayMaterial = null;
+        }
+
+        if (markerGameTexture != null)
+        {
+            markerGameTexture.Release();
+            Destroy(markerGameTexture);
+            markerGameTexture = null;
         }
     }
 
@@ -398,16 +434,66 @@ public class WebcamMarkerGameController : MonoBehaviour
         AssignLayerRecursively(gameRoot.gameObject, gameRenderLayer);
         sceneCamera.cullingMask &= ~(1 << gameRenderLayer);
 
+        markerGameTexture = new RenderTexture(
+            Mathf.Max(256, markerRenderTextureWidth),
+            Mathf.Max(256, markerRenderTextureHeight),
+            16,
+            RenderTextureFormat.ARGB32);
+        markerGameTexture.name = "AR Marker Game Render Texture";
+        markerGameTexture.Create();
+
         var cameraObject = new GameObject("AR Marker Game Camera");
         markerGameCamera = cameraObject.AddComponent<Camera>();
         markerGameCamera.enabled = false;
-        markerGameCamera.clearFlags = CameraClearFlags.Depth;
+        markerGameCamera.clearFlags = CameraClearFlags.SolidColor;
+        markerGameCamera.backgroundColor = new Color(0f, 0f, 0f, 0f);
         markerGameCamera.cullingMask = 1 << gameRenderLayer;
-        markerGameCamera.depth = sceneCamera.depth + 1f;
+        markerGameCamera.targetTexture = markerGameTexture;
         markerGameCamera.orthographic = true;
         markerGameCamera.nearClipPlane = 0.1f;
         markerGameCamera.farClipPlane = 100f;
-        UpdateMarkerGameCameraView(new Rect(0f, 0f, 1f, 1f), true);
+
+        CreateMarkerOverlayObject();
+        UpdateMarkerGameCameraView();
+    }
+
+    private void CreateMarkerOverlayObject()
+    {
+        if (sceneCamera == null || markerGameTexture == null)
+        {
+            return;
+        }
+
+        markerOverlayObject = new GameObject("AR Marker Game Overlay");
+        markerOverlayObject.transform.SetParent(sceneCamera.transform, false);
+        markerOverlayObject.transform.localPosition = Vector3.zero;
+        markerOverlayObject.transform.localRotation = Quaternion.identity;
+        markerOverlayObject.transform.localScale = Vector3.one;
+        markerOverlayObject.SetActive(false);
+
+        markerOverlayMesh = new Mesh();
+        markerOverlayMesh.name = "AR Marker Game Overlay Mesh";
+
+        var meshFilter = markerOverlayObject.AddComponent<MeshFilter>();
+        meshFilter.sharedMesh = markerOverlayMesh;
+
+        markerOverlayMaterial = new Material(Shader.Find("Unlit/Texture"));
+        markerOverlayMaterial.name = "AR Marker Game Overlay Material";
+        markerOverlayMaterial.mainTexture = markerGameTexture;
+        markerOverlayMaterial.renderQueue = 3000;
+
+        var meshRenderer = markerOverlayObject.AddComponent<MeshRenderer>();
+        meshRenderer.sharedMaterial = markerOverlayMaterial;
+        meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        meshRenderer.receiveShadows = false;
+
+        UpdateMarkerOverlayMesh(new[]
+        {
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f)
+        });
     }
 
     private void AssignLayerRecursively(GameObject currentObject, int layer)
@@ -444,38 +530,104 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private void PlaceGameOnMarker(CheckerboardMarkerCandidate markerCandidate, bool immediate)
     {
-        if (gameRoot == null || sceneCamera == null || !markerCandidate.Found)
+        if (gameRoot == null || sceneCamera == null || markerOverlayMesh == null || !markerCandidate.Found)
         {
             return;
         }
 
+        var targetCorners = new[]
+        {
+            GridToViewport(markerCandidate.Corner0Grid),
+            GridToViewport(markerCandidate.Corner1Grid),
+            GridToViewport(markerCandidate.Corner2Grid),
+            GridToViewport(markerCandidate.Corner3Grid)
+        };
+
+        ApplyMarkerViewportPadding(targetCorners);
+
+        if (immediate || !markerOverlayReady)
+        {
+            for (var index = 0; index < currentOverlayCorners.Length; index++)
+            {
+                currentOverlayCorners[index] = targetCorners[index];
+            }
+
+            markerOverlayReady = true;
+        }
+        else
+        {
+            var t = Mathf.Clamp01(markerPlacementSmoothness * Time.unscaledDeltaTime);
+            for (var index = 0; index < currentOverlayCorners.Length; index++)
+            {
+                currentOverlayCorners[index] = Vector2.Lerp(currentOverlayCorners[index], targetCorners[index], t);
+            }
+        }
+
+        UpdateMarkerOverlayMesh(currentOverlayCorners);
+        UpdateMarkerGameCameraView();
+    }
+
+    private Vector2 GridToViewport(Vector2 gridPoint)
+    {
         var gridWidth = Mathf.Max(1, currentMarkerGridWidth);
         var gridHeight = Mathf.Max(1, currentMarkerGridHeight);
-        var minScreenX = markerCandidate.MinGridX / (float)gridWidth;
-        var maxScreenX = markerCandidate.MaxGridX / (float)gridWidth;
-        var minScreenY = markerCandidate.MinGridY / (float)gridHeight;
-        var maxScreenY = markerCandidate.MaxGridY / (float)gridHeight;
-
-        var markerRect = CreatePaddedViewportRect(minScreenX, maxScreenX, minScreenY, maxScreenY);
-        UpdateMarkerGameCameraView(markerRect, immediate);
+        return new Vector2(
+            Mathf.Clamp01(gridPoint.x / gridWidth),
+            Mathf.Clamp01(gridPoint.y / gridHeight));
     }
 
-    private Rect CreatePaddedViewportRect(float minX, float maxX, float minY, float maxY)
+    private void ApplyMarkerViewportPadding(Vector2[] corners)
     {
-        var centerX = (minX + maxX) * 0.5f;
-        var centerY = (minY + maxY) * 0.5f;
-        var width = Mathf.Abs(maxX - minX) * markerViewportPadding;
-        var height = Mathf.Abs(maxY - minY) * markerViewportPadding;
+        var center = Vector2.zero;
+        for (var index = 0; index < corners.Length; index++)
+        {
+            center += corners[index];
+        }
 
-        width = Mathf.Clamp(width, 0.08f, 1f);
-        height = Mathf.Clamp(height, 0.08f, 1f);
-
-        var x = Mathf.Clamp(centerX - width * 0.5f, 0f, 1f - width);
-        var y = Mathf.Clamp(centerY - height * 0.5f, 0f, 1f - height);
-        return new Rect(x, y, width, height);
+        center /= Mathf.Max(1, corners.Length);
+        for (var index = 0; index < corners.Length; index++)
+        {
+            corners[index] = center + (corners[index] - center) * markerViewportPadding;
+            corners[index].x = Mathf.Clamp01(corners[index].x);
+            corners[index].y = Mathf.Clamp01(corners[index].y);
+        }
     }
 
-    private void UpdateMarkerGameCameraView(Rect viewportRect, bool immediate)
+    private void UpdateMarkerOverlayMesh(Vector2[] viewportCorners)
+    {
+        if (markerOverlayMesh == null || sceneCamera == null || viewportCorners == null || viewportCorners.Length < 4)
+        {
+            return;
+        }
+
+        var vertices = new[]
+        {
+            ViewportToCameraLocal(viewportCorners[0]),
+            ViewportToCameraLocal(viewportCorners[1]),
+            ViewportToCameraLocal(viewportCorners[2]),
+            ViewportToCameraLocal(viewportCorners[3])
+        };
+
+        markerOverlayMesh.Clear();
+        markerOverlayMesh.vertices = vertices;
+        markerOverlayMesh.uv = new[]
+        {
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(1f, 1f),
+            new Vector2(0f, 1f)
+        };
+        markerOverlayMesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+        markerOverlayMesh.RecalculateBounds();
+    }
+
+    private Vector3 ViewportToCameraLocal(Vector2 viewportPoint)
+    {
+        var worldPoint = sceneCamera.ViewportToWorldPoint(new Vector3(viewportPoint.x, viewportPoint.y, markerOverlayDepth));
+        return sceneCamera.transform.InverseTransformPoint(worldPoint);
+    }
+
+    private void UpdateMarkerGameCameraView()
     {
         if (markerGameCamera == null || gameRoot == null)
         {
@@ -483,19 +635,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         CacheGameRootBounds();
-
-        var targetRect = viewportRect;
-        if (!immediate)
-        {
-            var t = Mathf.Clamp01(markerPlacementSmoothness * Time.unscaledDeltaTime);
-            targetRect = new Rect(
-                Mathf.Lerp(markerGameCamera.rect.x, viewportRect.x, t),
-                Mathf.Lerp(markerGameCamera.rect.y, viewportRect.y, t),
-                Mathf.Lerp(markerGameCamera.rect.width, viewportRect.width, t),
-                Mathf.Lerp(markerGameCamera.rect.height, viewportRect.height, t));
-        }
-
-        markerGameCamera.rect = targetRect;
+        markerGameCamera.rect = new Rect(0f, 0f, 1f, 1f);
 
         var bounds = gameRootBoundsReady
             ? gameRootLocalBounds
@@ -507,7 +647,9 @@ public class WebcamMarkerGameController : MonoBehaviour
         markerGameCamera.transform.position = targetPosition;
         markerGameCamera.transform.rotation = targetRotation;
 
-        var viewportAspect = Mathf.Max(0.1f, Screen.width * targetRect.width / Mathf.Max(1f, Screen.height * targetRect.height));
+        var viewportAspect = markerGameTexture == null
+            ? 4f / 3f
+            : markerGameTexture.width / (float)Mathf.Max(1, markerGameTexture.height);
         var widthSize = Mathf.Max(0.1f, bounds.size.x * Mathf.Abs(gameRoot.localScale.x));
         var depthSize = Mathf.Max(0.1f, bounds.size.z * Mathf.Abs(gameRoot.localScale.z));
         markerGameCamera.orthographicSize = Mathf.Max(depthSize * 0.5f, widthSize / (2f * viewportAspect)) * markerOverlayCameraPadding;
@@ -720,8 +862,19 @@ public class WebcamMarkerGameController : MonoBehaviour
             MinGridX = Mathf.Clamp(bestComponent.MinX - paddingX, 0, gridWidth),
             MaxGridX = Mathf.Clamp(bestComponent.MaxX + paddingX + 1, 0, gridWidth),
             MinGridY = Mathf.Clamp(bestComponent.MinY - paddingY, 0, gridHeight),
-            MaxGridY = Mathf.Clamp(bestComponent.MaxY + paddingY + 1, 0, gridHeight)
+            MaxGridY = Mathf.Clamp(bestComponent.MaxY + paddingY + 1, 0, gridHeight),
+            Corner0Grid = ClampGridPoint(bestComponent.Corner0Grid, gridWidth, gridHeight),
+            Corner1Grid = ClampGridPoint(bestComponent.Corner1Grid, gridWidth, gridHeight),
+            Corner2Grid = ClampGridPoint(bestComponent.Corner2Grid, gridWidth, gridHeight),
+            Corner3Grid = ClampGridPoint(bestComponent.Corner3Grid, gridWidth, gridHeight)
         };
+    }
+
+    private Vector2 ClampGridPoint(Vector2 point, int gridWidth, int gridHeight)
+    {
+        return new Vector2(
+            Mathf.Clamp(point.x, 0f, gridWidth),
+            Mathf.Clamp(point.y, 0f, gridHeight));
     }
 
     private void MarkCheckerContrastCells(int gridWidth, int gridHeight)
@@ -1081,6 +1234,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         var minY = gridHeight;
         var maxY = 0;
         var edgeCount = 0;
+        var sumX = 0f;
+        var sumY = 0f;
+        var sumXX = 0f;
+        var sumYY = 0f;
+        var sumXY = 0f;
 
         componentQueue[tail++] = startIndex;
         visitedCells[startIndex] = 1;
@@ -1096,6 +1254,11 @@ public class WebcamMarkerGameController : MonoBehaviour
             minY = Mathf.Min(minY, y);
             maxY = Mathf.Max(maxY, y);
             edgeCount++;
+            sumX += x;
+            sumY += y;
+            sumXX += x * x;
+            sumYY += y * y;
+            sumXY += x * y;
 
             AddWhiteNeighbor(index - 1, x > 0, ref tail);
             AddWhiteNeighbor(index + 1, x < gridWidth - 1, ref tail);
@@ -1114,7 +1277,70 @@ public class WebcamMarkerGameController : MonoBehaviour
         result.MaxY = maxY;
         result.EdgeCount = edgeCount;
         result.Density = edgeCount / (float)area;
+        ApplyOrientedComponentCorners(ref result, gridWidth, gridHeight, edgeCount, sumX, sumY, sumXX, sumYY, sumXY, tail);
         return result;
+    }
+
+    private void ApplyOrientedComponentCorners(
+        ref CheckerContrastComponent component,
+        int gridWidth,
+        int gridHeight,
+        int edgeCount,
+        float sumX,
+        float sumY,
+        float sumXX,
+        float sumYY,
+        float sumXY,
+        int queueLength)
+    {
+        if (edgeCount <= 0)
+        {
+            component.Corner0Grid = new Vector2(component.MinX, component.MinY);
+            component.Corner1Grid = new Vector2(component.MaxX, component.MinY);
+            component.Corner2Grid = new Vector2(component.MaxX, component.MaxY);
+            component.Corner3Grid = new Vector2(component.MinX, component.MaxY);
+            return;
+        }
+
+        var invCount = 1f / edgeCount;
+        var center = new Vector2(sumX * invCount, sumY * invCount);
+        var covarianceXX = sumXX * invCount - center.x * center.x;
+        var covarianceYY = sumYY * invCount - center.y * center.y;
+        var covarianceXY = sumXY * invCount - center.x * center.y;
+        var angle = 0.5f * Mathf.Atan2(2f * covarianceXY, covarianceXX - covarianceYY);
+        var axisX = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        var axisY = new Vector2(-axisX.y, axisX.x);
+
+        var minProjectionX = float.PositiveInfinity;
+        var maxProjectionX = float.NegativeInfinity;
+        var minProjectionY = float.PositiveInfinity;
+        var maxProjectionY = float.NegativeInfinity;
+
+        for (var index = 0; index < queueLength; index++)
+        {
+            var cellIndex = componentQueue[index];
+            var x = cellIndex % gridWidth;
+            var y = cellIndex / gridWidth;
+            var offset = new Vector2(x, y) - center;
+            var projectionX = Vector2.Dot(offset, axisX);
+            var projectionY = Vector2.Dot(offset, axisY);
+            minProjectionX = Mathf.Min(minProjectionX, projectionX);
+            maxProjectionX = Mathf.Max(maxProjectionX, projectionX);
+            minProjectionY = Mathf.Min(minProjectionY, projectionY);
+            maxProjectionY = Mathf.Max(maxProjectionY, projectionY);
+        }
+
+        var widthPadding = Mathf.Max(1f, (maxProjectionX - minProjectionX) * detectedTabletContourPadding.x);
+        var heightPadding = Mathf.Max(1f, (maxProjectionY - minProjectionY) * detectedTabletContourPadding.y);
+        minProjectionX -= widthPadding;
+        maxProjectionX += widthPadding;
+        minProjectionY -= heightPadding;
+        maxProjectionY += heightPadding;
+
+        component.Corner0Grid = ClampGridPoint(center + axisX * minProjectionX + axisY * minProjectionY, gridWidth, gridHeight);
+        component.Corner1Grid = ClampGridPoint(center + axisX * maxProjectionX + axisY * minProjectionY, gridWidth, gridHeight);
+        component.Corner2Grid = ClampGridPoint(center + axisX * maxProjectionX + axisY * maxProjectionY, gridWidth, gridHeight);
+        component.Corner3Grid = ClampGridPoint(center + axisX * minProjectionX + axisY * maxProjectionY, gridWidth, gridHeight);
     }
 
     private int ReadGridLuminance(int gridX, int gridY)
@@ -1413,6 +1639,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         if (markerGameCamera != null)
         {
             markerGameCamera.enabled = visible;
+        }
+
+        if (markerOverlayObject != null)
+        {
+            markerOverlayObject.SetActive(visible);
         }
 
         foreach (var currentRenderer in gameRoot.GetComponentsInChildren<Renderer>(true))

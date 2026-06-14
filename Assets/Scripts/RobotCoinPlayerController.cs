@@ -6,7 +6,7 @@ using UnityEngine;
 [RequireComponent(typeof(CapsuleCollider))]
 public class RobotCoinPlayerController : MonoBehaviour
 {
-    [SerializeField] private float moveSpeed = 0.9f;
+    [SerializeField] private float moveSpeed = 2.4f;
     [SerializeField] private float fallLoseHeight = -3f;
     [SerializeField] private float rotateSpeed = 130f;
     [SerializeField] private Animator animator;

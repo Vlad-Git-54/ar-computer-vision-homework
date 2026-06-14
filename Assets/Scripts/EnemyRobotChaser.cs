@@ -7,10 +7,10 @@ using UnityEngine;
 public class EnemyRobotChaser : MonoBehaviour
 {
     [SerializeField] private string targetObjectName = "Robot Player";
-    [SerializeField] private float moveSpeed = 0.9f;
-    [SerializeField] private float rotationSpeed = 4.5f;
-    [SerializeField] private float stopDistance = 0.75f;
-    [SerializeField] private float startDelay = 3f;
+    [SerializeField] private float moveSpeed = 2.4f;
+    [SerializeField] private float rotationSpeed = 8f;
+    [SerializeField] private float stopDistance = 0.05f;
+    [SerializeField] private float startDelay = 1.5f;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
     [SerializeField] private string movingParameter = "IsMoving";
