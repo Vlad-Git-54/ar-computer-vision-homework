@@ -28,6 +28,8 @@ public class RobotCoinPlayerController : MonoBehaviour
     private float rotateInput;
     private bool fallLossTriggered;
 
+    public float MoveSpeed => moveSpeed;
+
     private void Awake()
     {
         robotRigidbody = GetComponent<Rigidbody>();

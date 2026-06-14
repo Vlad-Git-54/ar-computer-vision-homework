@@ -2869,8 +2869,9 @@ MonoBehaviour:
   gameRootScale: {x: 1, y: 1, z: 1}
   fallbackGameplayWidth: 24
   fallbackGameplayDepth: 18
-  markerPlacementSmoothness: 6
-  markerBoundsSmoothness: 8
+  markerPlacementSmoothness: 2.2
+  markerBoundsSmoothness: 3
+  markerViewportDeadZone: 0.018
   gameRenderLayer: 30
   markerRenderTextureWidth: 1024
   markerRenderTextureHeight: 768

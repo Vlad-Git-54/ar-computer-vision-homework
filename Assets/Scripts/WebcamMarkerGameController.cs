@@ -50,8 +50,9 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private Vector3 gameRootScale = Vector3.one;
     [SerializeField] private float fallbackGameplayWidth = 24f;
     [SerializeField] private float fallbackGameplayDepth = 18f;
-    [SerializeField] private float markerPlacementSmoothness = 6f;
-    [SerializeField] private float markerBoundsSmoothness = 8f;
+    [SerializeField] private float markerPlacementSmoothness = 2.2f;
+    [SerializeField] private float markerBoundsSmoothness = 3f;
+    [SerializeField] private float markerViewportDeadZone = 0.018f;
     [SerializeField] private int gameRenderLayer = 30;
     [SerializeField] private int markerRenderTextureWidth = 1024;
     [SerializeField] private int markerRenderTextureHeight = 768;
@@ -547,6 +548,11 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         ApplyMarkerViewportPadding(targetCorners);
 
+        if (!immediate && markerOverlayReady && GetMaxViewportCornerDelta(targetCorners) <= markerViewportDeadZone)
+        {
+            return;
+        }
+
         if (immediate || !markerOverlayReady)
         {
             for (var index = 0; index < currentOverlayCorners.Length; index++)
@@ -567,6 +573,17 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         UpdateMarkerOverlayMesh(currentOverlayCorners);
         UpdateMarkerGameCameraView();
+    }
+
+    private float GetMaxViewportCornerDelta(Vector2[] targetCorners)
+    {
+        var maxDelta = 0f;
+        for (var index = 0; index < currentOverlayCorners.Length && index < targetCorners.Length; index++)
+        {
+            maxDelta = Mathf.Max(maxDelta, Vector2.Distance(currentOverlayCorners[index], targetCorners[index]));
+        }
+
+        return maxDelta;
     }
 
     private Vector2 GridToViewport(Vector2 gridPoint)

@@ -18,6 +18,7 @@ public class EnemyRobotChaser : MonoBehaviour
 
     private Rigidbody enemyRigidbody;
     private Transform target;
+    private RobotCoinPlayerController targetPlayerController;
     private Renderer[] renderers;
     private float canStartChasingTime;
 
@@ -73,13 +74,14 @@ public class EnemyRobotChaser : MonoBehaviour
             return;
         }
 
+        var currentMoveSpeed = targetPlayerController != null ? targetPlayerController.MoveSpeed : moveSpeed;
         var moveDirection = direction.normalized;
         var targetRotation = Quaternion.LookRotation(moveDirection, Vector3.up);
         enemyRigidbody.MoveRotation(Quaternion.Slerp(enemyRigidbody.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
 
-        var nextPosition = enemyRigidbody.position + moveDirection * moveSpeed * Time.fixedDeltaTime;
+        var nextPosition = enemyRigidbody.position + moveDirection * currentMoveSpeed * Time.fixedDeltaTime;
         enemyRigidbody.MovePosition(nextPosition);
-        SetAnimationSpeed(moveSpeed);
+        SetAnimationSpeed(currentMoveSpeed);
     }
 
     private void FindTarget()
@@ -88,6 +90,7 @@ public class EnemyRobotChaser : MonoBehaviour
         if (playerObject != null)
         {
             target = playerObject.transform;
+            targetPlayerController = playerObject.GetComponent<RobotCoinPlayerController>();
         }
     }
 
