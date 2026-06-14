@@ -34,8 +34,8 @@ public class FinalGameController : MonoBehaviour
     private readonly List<GameObject> enemies = new List<GameObject>();
     private readonly Color floorColor = new Color(0.56f, 0.82f, 0.75f, 1f);
     private readonly Color wallColor = new Color(0.55f, 0.63f, 0.76f, 1f);
-    private readonly Vector3 cameraOffset = new Vector3(0f, 10.5f, -13.5f);
-    private const float CameraLookHeight = 1.25f;
+    private readonly Vector3 cameraOffset = new Vector3(0f, 4.3f, -7.4f);
+    private const float CameraLookHeight = 1.2f;
 
     private NavMeshData navMeshData;
     private NavMeshDataInstance navMeshInstance;
@@ -354,7 +354,7 @@ public class FinalGameController : MonoBehaviour
         }
 
         cameraObject.tag = "MainCamera";
-        gameCamera.fieldOfView = 54f;
+        gameCamera.fieldOfView = 48f;
         gameCamera.nearClipPlane = 0.05f;
         gameCamera.farClipPlane = 200f;
         gameCamera.clearFlags = CameraClearFlags.Skybox;
@@ -371,7 +371,7 @@ public class FinalGameController : MonoBehaviour
         }
 
         SetPrivateField(follow, "offset", cameraOffset);
-        SetPrivateField(follow, "followSpeed", 9f);
+        SetPrivateField(follow, "followSpeed", 7f);
         SetPrivateField(follow, "lookHeight", CameraLookHeight);
     }
 
@@ -617,6 +617,7 @@ public class FinalGameController : MonoBehaviour
         glow.transform.localPosition = Vector3.zero;
 
         var particles = glow.AddComponent<ParticleSystem>();
+        particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = particles.main;
         main.startLifetime = 0.55f;
         main.startSpeed = 0.25f;
@@ -631,6 +632,10 @@ public class FinalGameController : MonoBehaviour
         var shape = particles.shape;
         shape.shapeType = ParticleSystemShapeType.Sphere;
         shape.radius = 0.4f;
+
+        var renderer = particles.GetComponent<ParticleSystemRenderer>();
+        renderer.material = CreateParticleMaterial(new Color(1f, 0.9f, 0.2f, 1f));
+        particles.Play();
     }
 
     private void CreatePointClouds()
@@ -646,6 +651,7 @@ public class FinalGameController : MonoBehaviour
         cloud.transform.localScale = scale;
 
         var particles = cloud.AddComponent<ParticleSystem>();
+        particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = particles.main;
         main.loop = true;
         main.startLifetime = 9f;
@@ -667,6 +673,10 @@ public class FinalGameController : MonoBehaviour
         noise.strength = 0.18f;
         noise.frequency = 0.35f;
         noise.scrollSpeed = 0.2f;
+
+        var renderer = particles.GetComponent<ParticleSystemRenderer>();
+        renderer.material = CreateParticleMaterial(new Color(0.86f, 0.98f, 1f, 1f));
+        particles.Play();
     }
 
     private void CreateAudio()
@@ -697,6 +707,7 @@ public class FinalGameController : MonoBehaviour
         var burstObject = new GameObject("Coin Pickup Particles");
         burstObject.transform.position = position;
         var particles = burstObject.AddComponent<ParticleSystem>();
+        particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         var main = particles.main;
         main.duration = 0.45f;
@@ -714,7 +725,33 @@ public class FinalGameController : MonoBehaviour
         shape.shapeType = ParticleSystemShapeType.Sphere;
         shape.radius = 0.18f;
 
+        var renderer = particles.GetComponent<ParticleSystemRenderer>();
+        renderer.material = CreateParticleMaterial(new Color(1f, 0.84f, 0.16f, 1f));
+        particles.Play();
         Destroy(burstObject, 1.25f);
+    }
+
+    private Material CreateParticleMaterial(Color color)
+    {
+        var shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Standard");
+        }
+
+        var material = new Material(shader);
+        material.color = color;
+        return material;
     }
 
     private void CreateHud()

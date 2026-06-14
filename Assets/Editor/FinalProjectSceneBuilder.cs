@@ -56,10 +56,10 @@ public static class FinalProjectSceneBuilder
 
         var cameraObject = new GameObject("Main Camera");
         cameraObject.tag = "MainCamera";
-        cameraObject.transform.position = new Vector3(0f, 10.5f, -13.5f);
-        cameraObject.transform.rotation = Quaternion.Euler(38f, 0f, 0f);
+        cameraObject.transform.position = new Vector3(0f, 4.3f, -7.4f);
+        cameraObject.transform.rotation = Quaternion.Euler(24f, 0f, 0f);
         var camera = cameraObject.AddComponent<Camera>();
-        camera.fieldOfView = 54f;
+        camera.fieldOfView = 48f;
         camera.nearClipPlane = 0.05f;
         camera.farClipPlane = 200f;
         cameraObject.AddComponent<AudioListener>();
