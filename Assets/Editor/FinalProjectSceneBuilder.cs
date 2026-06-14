@@ -29,6 +29,7 @@ public static class FinalProjectSceneBuilder
         var controllerObject = new GameObject("Final Main Menu Controller");
         controllerObject.AddComponent<FinalMainMenuController>();
         controllerObject.AddComponent<FinalWebcamGestureInput>();
+        controllerObject.AddComponent<FinalMenuEditorPreview>();
 
         var cameraObject = new GameObject("Main Camera");
         cameraObject.tag = "MainCamera";
@@ -49,6 +50,7 @@ public static class FinalProjectSceneBuilder
         var controllerObject = new GameObject("Final Game Controller");
         var controller = controllerObject.AddComponent<FinalGameController>();
         controllerObject.AddComponent<FinalWebcamGestureInput>();
+        controllerObject.AddComponent<FinalSceneEditorPreview>();
         controller.robotPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/KyleRobot.prefab");
         controller.coinPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Coin.prefab");
         controller.playerAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Animations/PlayerRobotAnimator.controller");

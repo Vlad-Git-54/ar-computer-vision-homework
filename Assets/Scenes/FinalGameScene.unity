@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 200001}
   - component: {fileID: 200002}
   - component: {fileID: 200003}
+  - component: {fileID: 200004}
   m_Layer: 0
   m_Name: Final Game Controller
   m_TagString: Untagged
@@ -203,11 +204,28 @@ MonoBehaviour:
   requestedWidth: 640
   requestedHeight: 360
   requestedFps: 30
-  motionThreshold: 42
+  useSkinColor: 1
+  useMotionFallback: 1
+  motionThreshold: 28
   blockSize: 8
-  minChangedPixelsPerBlock: 8
-  minBlobBlocks: 5
+  minChangedPixelsPerBlock: 3
+  minBlobBlocks: 4
   zoneLatchSeconds: 1.1
+  cameraRestartDelay: 2.5
+--- !u!114 &200004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31f3d238bba8453199bdb95aa116f140, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  showPreviewInEditMode: 1
+  arenaSize: {x: 42, y: 24}
 --- !u!1 &300000
 GameObject:
   m_ObjectHideFlags: 0

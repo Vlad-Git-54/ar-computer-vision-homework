@@ -1,5 +1,6 @@
 // Автор: Марьяновский Владислав Андреевич
 
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,11 +22,14 @@ public class FinalWebcamGestureInput : MonoBehaviour
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 360;
     [SerializeField] private int requestedFps = 30;
-    [SerializeField] private int motionThreshold = 42;
+    [SerializeField] private bool useSkinColor = true;
+    [SerializeField] private bool useMotionFallback = true;
+    [SerializeField] private int motionThreshold = 28;
     [SerializeField] private int blockSize = 8;
-    [SerializeField] private int minChangedPixelsPerBlock = 8;
-    [SerializeField] private int minBlobBlocks = 5;
+    [SerializeField] private int minChangedPixelsPerBlock = 3;
+    [SerializeField] private int minBlobBlocks = 4;
     [SerializeField] private float zoneLatchSeconds = 1.1f;
+    [SerializeField] private float cameraRestartDelay = 2.5f;
 
     private WebCamTexture webcamTexture;
     private Texture2D binaryPreviewTexture;
@@ -53,7 +57,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
     private bool triedDefaultCameraFallback;
 
     public FinalGestureZone ActiveZone => activeZone;
-    public bool IsReady => webcamTexture != null && webcamTexture.isPlaying && webcamTexture.width > 32 && webcamTexture.height > 32;
+    public bool IsReady => webcamTexture != null && webcamTexture.width > 32 && webcamTexture.height > 32;
     public float LeftScore => leftScore;
     public float CenterScore => centerScore;
     public float RightScore => rightScore;
@@ -70,8 +74,13 @@ public class FinalWebcamGestureInput : MonoBehaviour
         UpdateStatusText();
     }
 
-    private void Start()
+    private IEnumerator Start()
     {
+        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
+        {
+            yield return Application.RequestUserAuthorization(UserAuthorization.WebCam);
+        }
+
         StartWebcam(false);
     }
 
@@ -120,7 +129,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
 
     private void StartWebcam(bool useDefaultConstructor)
     {
-        if (WebCamTexture.devices.Length == 0)
+        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
         {
             UpdateStatusText();
             return;
@@ -131,10 +140,15 @@ public class FinalWebcamGestureInput : MonoBehaviour
             webcamTexture.Stop();
         }
 
-        var deviceName = WebCamTexture.devices[0].name;
-        webcamTexture = useDefaultConstructor
-            ? new WebCamTexture(deviceName)
-            : new WebCamTexture(deviceName, requestedWidth, requestedHeight, requestedFps);
+        var devices = WebCamTexture.devices;
+        if (devices.Length > 0 && !useDefaultConstructor)
+        {
+            webcamTexture = new WebCamTexture(devices[0].name, requestedWidth, requestedHeight, requestedFps);
+        }
+        else
+        {
+            webcamTexture = new WebCamTexture();
+        }
 
         webcamTexture.Play();
         webcamStartTime = Time.unscaledTime;
@@ -145,14 +159,20 @@ public class FinalWebcamGestureInput : MonoBehaviour
 
     private void RestartSlowCameraIfNeeded()
     {
-        if (webcamTexture == null || IsReady || triedDefaultCameraFallback)
+        if (webcamTexture == null || IsReady)
         {
             return;
         }
 
-        if (Time.unscaledTime - webcamStartTime > 3.5f)
+        if (!triedDefaultCameraFallback && Time.unscaledTime - webcamStartTime > cameraRestartDelay)
         {
             StartWebcam(true);
+            return;
+        }
+
+        if (triedDefaultCameraFallback && Time.unscaledTime - webcamStartTime > cameraRestartDelay * 2f)
+        {
+            StartWebcam(false);
         }
     }
 
@@ -189,8 +209,15 @@ public class FinalWebcamGestureInput : MonoBehaviour
 
     private void SampleWebcamIfNeeded()
     {
-        if (webcamTexture == null || !webcamTexture.isPlaying)
+        if (webcamTexture == null)
         {
+            activeZone = FinalGestureZone.None;
+            return;
+        }
+
+        if (!webcamTexture.isPlaying)
+        {
+            webcamTexture.Play();
             activeZone = FinalGestureZone.None;
             return;
         }
@@ -214,12 +241,9 @@ public class FinalWebcamGestureInput : MonoBehaviour
         {
             previousPixels = new Color32[currentPixels.Length];
             System.Array.Copy(currentPixels, previousPixels, currentPixels.Length);
-            ClearPreview();
-            activeZone = FinalGestureZone.None;
-            return;
         }
 
-        var detectedZone = DetectMotionContour();
+        var detectedZone = DetectHandContour();
         System.Array.Copy(currentPixels, previousPixels, currentPixels.Length);
 
         if (detectedZone != FinalGestureZone.None)
@@ -263,13 +287,13 @@ public class FinalWebcamGestureInput : MonoBehaviour
         ClearPreview();
     }
 
-    private FinalGestureZone DetectMotionContour()
+    private FinalGestureZone DetectHandContour()
     {
         System.Array.Clear(movingBlocks, 0, movingBlocks.Length);
         System.Array.Clear(largestBlobBlocks, 0, largestBlobBlocks.Length);
         System.Array.Clear(visitedBlocks, 0, visitedBlocks.Length);
 
-        BuildMotionBlocks();
+        BuildForegroundBlocks();
         var blob = FindLargestBlob();
         DrawMotionPreview(blob);
 
@@ -300,7 +324,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
         return FinalGestureZone.Center;
     }
 
-    private void BuildMotionBlocks()
+    private void BuildForegroundBlocks()
     {
         for (var by = 0; by < gridHeight; by++)
         {
@@ -318,7 +342,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
                     {
                         var sourceX = mirrorPreview ? cachedWidth - 1 - x : x;
                         var index = y * cachedWidth + sourceX;
-                        if (IsMovingPixel(index))
+                        if (IsForegroundPixel(index))
                         {
                             changed++;
                         }
@@ -410,12 +434,41 @@ public class FinalWebcamGestureInput : MonoBehaviour
         return blob;
     }
 
+    private bool IsForegroundPixel(int index)
+    {
+        var current = currentPixels[index];
+        if (useSkinColor && IsSkinPixel(current))
+        {
+            return true;
+        }
+
+        return useMotionFallback && previousPixels != null && IsMovingPixel(index);
+    }
+
     private bool IsMovingPixel(int index)
     {
         var current = currentPixels[index];
         var previous = previousPixels[index];
         var difference = Mathf.Abs(current.r - previous.r) + Mathf.Abs(current.g - previous.g) + Mathf.Abs(current.b - previous.b);
         return difference >= motionThreshold;
+    }
+
+    private bool IsSkinPixel(Color32 color)
+    {
+        var max = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
+        var min = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
+
+        if (color.r < 70 || color.g < 35 || color.b < 18)
+        {
+            return false;
+        }
+
+        if (max - min < 16)
+        {
+            return false;
+        }
+
+        return color.r > color.b + 8 && color.r >= color.g - 8 && color.g > color.b - 4;
     }
 
     private void DrawMotionPreview(MotionBlob blob)
@@ -535,7 +588,13 @@ public class FinalWebcamGestureInput : MonoBehaviour
             return;
         }
 
-        if (WebCamTexture.devices.Length == 0)
+        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
+        {
+            statusText.text = "Нет доступа к вебкамере. Разрешите камеру для Unity.";
+            return;
+        }
+
+        if (WebCamTexture.devices.Length == 0 && webcamTexture == null)
         {
             statusText.text = "Вебкамера не найдена. Можно использовать клавиатуру.";
             return;
@@ -543,7 +602,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
 
         if (webcamTexture == null || !webcamTexture.isPlaying)
         {
-            statusText.text = "Вебкамера запускается...";
+            statusText.text = "Вебкамера запускается или перезапускается...";
             return;
         }
 
@@ -557,7 +616,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
             activeZone == FinalGestureZone.Center ? "центр" :
             activeZone == FinalGestureZone.Right ? "правая зона" : "движение руки не найдено";
 
-        statusText.text = "Чёрно-белый AR режим: " + zone + ". Поднимите и слегка пошевелите рукой.";
+        statusText.text = "AR контур руки: " + zone + ". Держите руку в нужной зоне.";
     }
 
     private struct MotionBlob
