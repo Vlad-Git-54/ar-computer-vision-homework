@@ -6,21 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/SampleScene.unity
-    guid: 9fc0d4010bbf28b4594072e72b8655ab
+    path: Assets/Scenes/FinalMainMenuScene.unity
+    guid: 6da03f6188014d66b63b3c041f07b6a6
   - enabled: 1
-    path: Assets/Scenes/JointShowcaseScene.unity
-    guid: 598dab8cb40156b4d8de57811ba7c5dd
-  - enabled: 1
-    path: Assets/Scenes/NavMeshHomeworkScene.unity
-    guid: 53cd8ca331cad83478a4da23d1ad7568
-  - enabled: 1
-    path: Assets/Scenes/MainMenuScene.unity
-    guid: da779146a3d34dafa7fa139c3560a073
-  - enabled: 1
-    path: Assets/Scenes/ARMarkerHomeworkScene.unity
-    guid: 8a5a5ac755a447c5b51a54e263784b38
-  - enabled: 1
-    path: Assets/Scenes/ContourTrackingHomeworkScene.unity
-    guid: 4eaac02e47b445c6a3cb57df4c44f7fa
+    path: Assets/Scenes/FinalGameScene.unity
+    guid: 4b6a91417f114e0cbfa97fbd44802715
   m_configObjects: {}

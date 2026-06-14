@@ -1,0 +1,60 @@
+// Автор: Марьяновский Владислав Андреевич
+
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public static class FinalProjectSceneBuilder
+{
+    private const string MainMenuScenePath = "Assets/Scenes/FinalMainMenuScene.unity";
+    private const string GameScenePath = "Assets/Scenes/FinalGameScene.unity";
+
+    [MenuItem("Tools/Final Project/Rebuild Scenes")]
+    public static void BuildFinalProject()
+    {
+        CreateMainMenuScene();
+        CreateGameScene();
+        ConfigureBuildSettings();
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("Финальные сцены проекта созданы");
+    }
+
+    private static void CreateMainMenuScene()
+    {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        scene.name = "FinalMainMenuScene";
+
+        var controllerObject = new GameObject("Final Main Menu Controller");
+        controllerObject.AddComponent<FinalMainMenuController>();
+
+        EditorSceneManager.SaveScene(scene, MainMenuScenePath);
+    }
+
+    private static void CreateGameScene()
+    {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        scene.name = "FinalGameScene";
+
+        var controllerObject = new GameObject("Final Game Controller");
+        var controller = controllerObject.AddComponent<FinalGameController>();
+        controller.robotPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/KyleRobot.prefab");
+        controller.coinPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Coin.prefab");
+        controller.playerAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Animations/PlayerRobotAnimator.controller");
+        controller.enemyAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/Animations/EnemyRobotAnimator.controller");
+        controller.backgroundMusic = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Resources/Audio/Open World Happiness Full.wav");
+        controller.coinPickupSound = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Resources/Audio/CoinPickup.wav");
+
+        EditorSceneManager.SaveScene(scene, GameScenePath);
+    }
+
+    private static void ConfigureBuildSettings()
+    {
+        EditorBuildSettings.scenes = new[]
+        {
+            new EditorBuildSettingsScene(MainMenuScenePath, true),
+            new EditorBuildSettingsScene(GameScenePath, true)
+        };
+    }
+}
