@@ -2847,8 +2847,8 @@ MonoBehaviour:
   keepGameVisibleAfterTrigger: 0
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0448\u0430\u0445\u043C\u0430\u0442\u043D\u0430\u044F \u0434\u043E\u0441\u043A\u0430 \u043B\u044E\u0431\u043E\u0433\u043E \u0440\u0430\u0437\u043C\u0435\u0440\u0430"
   useFixedTabletMarkerPlacement: 1
-  fixedTabletMarkerMin: {x: 0.32, y: 0.36}
-  fixedTabletMarkerMax: {x: 0.77, y: 0.74}
+  fixedTabletMarkerMin: {x: 0.36, y: 0.38}
+  fixedTabletMarkerMax: {x: 0.70, y: 0.66}
   setupSceneAutomatically: 1
   gameRootPosition: {x: 0, y: 0, z: 0}
   gameRootRotation: {x: 0, y: 0, z: 0}

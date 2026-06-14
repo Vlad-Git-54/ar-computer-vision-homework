@@ -30,8 +30,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: шахматная доска любого размера";
     [SerializeField] private bool useFixedTabletMarkerPlacement = true;
-    [SerializeField] private Vector2 fixedTabletMarkerMin = new Vector2(0.32f, 0.36f);
-    [SerializeField] private Vector2 fixedTabletMarkerMax = new Vector2(0.77f, 0.74f);
+    [SerializeField] private Vector2 fixedTabletMarkerMin = new Vector2(0.36f, 0.38f);
+    [SerializeField] private Vector2 fixedTabletMarkerMax = new Vector2(0.70f, 0.66f);
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 gameRootPosition = Vector3.zero;
     [SerializeField] private Vector3 gameRootRotation = Vector3.zero;
