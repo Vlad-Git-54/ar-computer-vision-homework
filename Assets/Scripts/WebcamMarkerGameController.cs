@@ -6,8 +6,6 @@ using UnityEngine.UI;
 
 public class WebcamMarkerGameController : MonoBehaviour
 {
-    private static readonly float[] CheckerAspectMultipliers = { 0.72f, 0.85f, 1f, 1.15f, 1.32f };
-
     [SerializeField] private Transform gameRoot;
     [SerializeField] private Camera sceneCamera;
     [SerializeField] private int requestedWidth = 640;
@@ -15,14 +13,11 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedFps = 30;
     [SerializeField] private int brightThreshold = 128;
     [SerializeField] private int sampleStep = 6;
-    [SerializeField] private int minCheckerCells = 4;
-    [SerializeField] private int maxCheckerCells = 12;
-    [SerializeField] private int checkerSearchStride = 8;
-    [SerializeField] private int minCheckerContrast = 38;
-    [SerializeField] private float minCheckerScore = 0.74f;
+    [SerializeField] private int minCheckerContrast = 42;
+    [SerializeField] private float minCheckerEdgeDensity = 0.045f;
     [SerializeField] private float minCheckerSize = 0.08f;
     [SerializeField] private float maxCheckerSize = 0.92f;
-    [SerializeField] private float maxCheckerAspectStretch = 1.45f;
+    [SerializeField] private float maxCheckerAspect = 4.2f;
     [SerializeField] private float minMarkerSize = 0.1f;
     [SerializeField] private float maxMarkerSize = 0.92f;
     [SerializeField] private float minWhiteArea = 0.035f;
@@ -41,7 +36,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float fallbackGameplayWidth = 24f;
     [SerializeField] private float fallbackGameplayDepth = 18f;
     [SerializeField] private float markerGamePadding = 0.86f;
-    [SerializeField] private float minMarkerGameScale = 0.01f;
+    [SerializeField] private float minMarkerGameScale = 0.08f;
     [SerializeField] private float maxMarkerGameScale = 1.1f;
     [SerializeField] private float markerPlacementSmoothness = 6f;
     [SerializeField] private float markerBoundsSmoothness = 8f;
@@ -93,12 +88,22 @@ public class WebcamMarkerGameController : MonoBehaviour
         public bool Found;
         public float Score;
         public float Contrast;
-        public int Columns;
-        public int Rows;
         public float MinGridX;
         public float MaxGridX;
         public float MinGridY;
         public float MaxGridY;
+    }
+
+    private struct CheckerContrastComponent
+    {
+        public bool Found;
+        public int MinX;
+        public int MaxX;
+        public int MinY;
+        public int MaxY;
+        public int EdgeCount;
+        public float Density;
+        public float Score;
     }
 
     private void Awake()
@@ -222,8 +227,6 @@ public class WebcamMarkerGameController : MonoBehaviour
         smoothedCheckerboardCandidate.Found = markerCandidate.Found;
         smoothedCheckerboardCandidate.Score = markerCandidate.Score;
         smoothedCheckerboardCandidate.Contrast = markerCandidate.Contrast;
-        smoothedCheckerboardCandidate.Columns = markerCandidate.Columns;
-        smoothedCheckerboardCandidate.Rows = markerCandidate.Rows;
         smoothedCheckerboardCandidate.MinGridX = Mathf.Lerp(smoothedCheckerboardCandidate.MinGridX, markerCandidate.MinGridX, t);
         smoothedCheckerboardCandidate.MaxGridX = Mathf.Lerp(smoothedCheckerboardCandidate.MaxGridX, markerCandidate.MaxGridX, t);
         smoothedCheckerboardCandidate.MinGridY = Mathf.Lerp(smoothedCheckerboardCandidate.MinGridY, markerCandidate.MinGridY, t);
@@ -417,7 +420,7 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         foreach (var currentRenderer in renderers)
         {
-            if (currentRenderer == null)
+            if (currentRenderer == null || !ShouldUseRendererForGameBounds(currentRenderer))
             {
                 continue;
             }
@@ -450,6 +453,28 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         gameRootLocalBounds = localBounds;
         gameRootBoundsReady = true;
+    }
+
+    private bool ShouldUseRendererForGameBounds(Renderer currentRenderer)
+    {
+        if (currentRenderer.GetComponentInParent<Canvas>() != null)
+        {
+            return false;
+        }
+
+        var currentTransform = currentRenderer.transform;
+        while (currentTransform != null && currentTransform != gameRoot)
+        {
+            var objectName = currentTransform.name;
+            if (objectName == "Point Cloud Homework" || objectName == "Scene Audio Controller")
+            {
+                return false;
+            }
+
+            currentTransform = currentTransform.parent;
+        }
+
+        return true;
     }
 
     private void StartWebcam()
@@ -569,181 +594,143 @@ public class WebcamMarkerGameController : MonoBehaviour
 
     private CheckerboardMarkerCandidate FindBestCheckerboardMarker(int gridWidth, int gridHeight)
     {
-        var bestCandidate = new CheckerboardMarkerCandidate();
-        var minCells = Mathf.Clamp(minCheckerCells, 2, 16);
-        var maxCells = Mathf.Clamp(Mathf.Max(minCells, maxCheckerCells), minCells, 16);
-        var minWidth = Mathf.Max(minCells * 2, Mathf.RoundToInt(gridWidth * minCheckerSize));
-        var maxWidth = Mathf.Max(minWidth, Mathf.RoundToInt(gridWidth * maxCheckerSize));
-        var minHeight = Mathf.Max(minCells * 2, Mathf.RoundToInt(gridHeight * minCheckerSize));
-        var maxHeight = Mathf.Max(minHeight, Mathf.RoundToInt(gridHeight * maxCheckerSize));
-        var scaleStep = Mathf.Max(6, Mathf.Min(gridWidth, gridHeight) / 18);
-        var searchStride = Mathf.Max(4, checkerSearchStride);
-
-        for (var columns = minCells; columns <= maxCells; columns++)
+        MarkCheckerContrastCells(gridWidth, gridHeight);
+        var bestComponent = FindLargestCheckerContrastComponent(gridWidth, gridHeight);
+        if (!bestComponent.Found)
         {
-            for (var rows = minCells; rows <= maxCells; rows++)
-            {
-                if (!ShouldSearchCheckerFormat(columns, rows))
-                {
-                    continue;
-                }
-
-                SearchCheckerboardFormat(gridWidth, gridHeight, columns, rows, minWidth, maxWidth, minHeight, maxHeight, scaleStep, searchStride, ref bestCandidate);
-            }
+            return new CheckerboardMarkerCandidate();
         }
 
-        return bestCandidate;
-    }
-
-    private bool ShouldSearchCheckerFormat(int columns, int rows)
-    {
-        var smallerSide = Mathf.Min(columns, rows);
-        var largerSide = Mathf.Max(columns, rows);
-        var sideDifference = largerSide - smallerSide;
-        return sideDifference == 0 || sideDifference <= 2 || largerSide <= 8;
-    }
-
-    private void SearchCheckerboardFormat(int gridWidth, int gridHeight, int columns, int rows, int minWidth, int maxWidth, int minHeight, int maxHeight, int scaleStep, int searchStride, ref CheckerboardMarkerCandidate bestCandidate)
-    {
-        var expectedAspect = columns / (float)Mathf.Max(1, rows);
-        for (var candidateWidth = minWidth; candidateWidth <= maxWidth; candidateWidth += scaleStep)
-        {
-            var previousHeight = -1;
-            for (var aspectIndex = 0; aspectIndex < CheckerAspectMultipliers.Length; aspectIndex++)
-            {
-                var candidateHeight = Mathf.RoundToInt(candidateWidth / expectedAspect * CheckerAspectMultipliers[aspectIndex]);
-                if (Mathf.Abs(candidateHeight - previousHeight) < 2)
-                {
-                    continue;
-                }
-
-                previousHeight = candidateHeight;
-                if (candidateHeight < rows * 2 || candidateHeight < minHeight || candidateHeight > maxHeight)
-                {
-                    continue;
-                }
-
-                var actualAspect = candidateWidth / (float)Mathf.Max(1, candidateHeight);
-                var aspectStretch = Mathf.Max(actualAspect / expectedAspect, expectedAspect / Mathf.Max(0.01f, actualAspect));
-                if (aspectStretch > maxCheckerAspectStretch)
-                {
-                    continue;
-                }
-
-                for (var startY = 0; startY <= gridHeight - candidateHeight; startY += searchStride)
-                {
-                    for (var startX = 0; startX <= gridWidth - candidateWidth; startX += searchStride)
-                    {
-                        var candidate = ScoreCheckerboardCandidate(startX, startY, candidateWidth, candidateHeight, columns, rows);
-                        if (candidate.Found && GetCheckerboardCandidateRank(candidate) > GetCheckerboardCandidateRank(bestCandidate))
-                        {
-                            bestCandidate = candidate;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private float GetCheckerboardCandidateRank(CheckerboardMarkerCandidate candidate)
-    {
-        if (!candidate.Found)
-        {
-            return 0f;
-        }
-
-        var markerArea = Mathf.Max(0f, candidate.MaxGridX - candidate.MinGridX) * Mathf.Max(0f, candidate.MaxGridY - candidate.MinGridY);
-        var frameArea = Mathf.Max(1, currentMarkerGridWidth * currentMarkerGridHeight);
-        var areaScore = Mathf.Clamp01(markerArea / (frameArea * 0.3f));
-        var squareScore = candidate.Columns == candidate.Rows ? 0.04f : 0f;
-        return candidate.Score + areaScore * 0.16f + squareScore;
-    }
-
-    private CheckerboardMarkerCandidate ScoreCheckerboardCandidate(int startX, int startY, int candidateWidth, int candidateHeight, int columns, int rows)
-    {
-        var normalScore = ScoreCheckerboardOrientation(startX, startY, candidateWidth, candidateHeight, columns, rows, true, out var normalContrast);
-        var invertedScore = ScoreCheckerboardOrientation(startX, startY, candidateWidth, candidateHeight, columns, rows, false, out var invertedContrast);
-        var score = normalScore >= invertedScore ? normalScore : invertedScore;
-        var contrast = normalScore >= invertedScore ? normalContrast : invertedContrast;
+        var componentWidth = bestComponent.MaxX - bestComponent.MinX + 1;
+        var componentHeight = bestComponent.MaxY - bestComponent.MinY + 1;
+        var padding = Mathf.Max(3, Mathf.RoundToInt(Mathf.Max(componentWidth, componentHeight) * 0.08f));
 
         return new CheckerboardMarkerCandidate
         {
-            Found = score >= minCheckerScore && contrast >= minCheckerContrast,
-            Score = score,
-            Contrast = contrast,
-            Columns = columns,
-            Rows = rows,
-            MinGridX = startX,
-            MaxGridX = startX + candidateWidth,
-            MinGridY = startY,
-            MaxGridY = startY + candidateHeight
+            Found = true,
+            Score = bestComponent.Score,
+            Contrast = minCheckerContrast,
+            MinGridX = Mathf.Clamp(bestComponent.MinX - padding, 0, gridWidth),
+            MaxGridX = Mathf.Clamp(bestComponent.MaxX + padding + 1, 0, gridWidth),
+            MinGridY = Mathf.Clamp(bestComponent.MinY - padding, 0, gridHeight),
+            MaxGridY = Mathf.Clamp(bestComponent.MaxY + padding + 1, 0, gridHeight)
         };
     }
 
-    private float ScoreCheckerboardOrientation(int startX, int startY, int candidateWidth, int candidateHeight, int columns, int rows, bool topLeftDark, out float contrast)
+    private void MarkCheckerContrastCells(int gridWidth, int gridHeight)
     {
-        var darkSum = 0f;
-        var lightSum = 0f;
-        var darkCount = 0;
-        var lightCount = 0;
+        Array.Clear(whiteCells, 0, whiteCells.Length);
+        Array.Clear(visitedCells, 0, visitedCells.Length);
 
-        for (var row = 0; row < rows; row++)
+        for (var y = 1; y < gridHeight - 1; y++)
         {
-            for (var column = 0; column < columns; column++)
+            var rowStart = y * gridWidth;
+            for (var x = 1; x < gridWidth - 1; x++)
             {
-                var sampleX = startX + Mathf.RoundToInt((column + 0.5f) * candidateWidth / columns);
-                var sampleY = startY + Mathf.RoundToInt((row + 0.5f) * candidateHeight / rows);
-                var luminance = ReadGridLuminance(sampleX, sampleY);
-                var shouldBeDark = ((row + column) % 2 == 0) == topLeftDark;
+                var luminance = ReadGridLuminance(x, y);
+                var maxDelta = 0;
+                maxDelta = Mathf.Max(maxDelta, Mathf.Abs(luminance - ReadGridLuminance(x - 1, y)));
+                maxDelta = Mathf.Max(maxDelta, Mathf.Abs(luminance - ReadGridLuminance(x + 1, y)));
+                maxDelta = Mathf.Max(maxDelta, Mathf.Abs(luminance - ReadGridLuminance(x, y - 1)));
+                maxDelta = Mathf.Max(maxDelta, Mathf.Abs(luminance - ReadGridLuminance(x, y + 1)));
 
-                if (shouldBeDark)
+                if (maxDelta >= minCheckerContrast)
                 {
-                    darkSum += luminance;
-                    darkCount++;
-                }
-                else
-                {
-                    lightSum += luminance;
-                    lightCount++;
+                    whiteCells[rowStart + x] = 1;
                 }
             }
         }
+    }
 
-        var darkAverage = darkSum / Mathf.Max(1, darkCount);
-        var lightAverage = lightSum / Mathf.Max(1, lightCount);
-        contrast = lightAverage - darkAverage;
-        if (contrast <= 0f)
+    private CheckerContrastComponent FindLargestCheckerContrastComponent(int gridWidth, int gridHeight)
+    {
+        var bestComponent = new CheckerContrastComponent();
+        var totalArea = Mathf.Max(1, gridWidth * gridHeight);
+
+        for (var startIndex = 0; startIndex < whiteCells.Length; startIndex++)
         {
-            return 0f;
-        }
-
-        var threshold = (darkAverage + lightAverage) * 0.5f;
-        var matches = 0;
-        var total = Mathf.Max(1, columns * rows);
-
-        for (var row = 0; row < rows; row++)
-        {
-            for (var column = 0; column < columns; column++)
+            if (whiteCells[startIndex] == 0 || visitedCells[startIndex] != 0)
             {
-                var sampleX = startX + Mathf.RoundToInt((column + 0.5f) * candidateWidth / columns);
-                var sampleY = startY + Mathf.RoundToInt((row + 0.5f) * candidateHeight / rows);
-                var luminance = ReadGridLuminance(sampleX, sampleY);
-                var shouldBeDark = ((row + column) % 2 == 0) == topLeftDark;
+                continue;
+            }
 
-                if (shouldBeDark && luminance < threshold)
-                {
-                    matches++;
-                }
-                else if (!shouldBeDark && luminance > threshold)
-                {
-                    matches++;
-                }
+            var component = ReadCheckerContrastComponent(startIndex, gridWidth, gridHeight);
+            if (!component.Found)
+            {
+                continue;
+            }
+
+            var componentWidth = component.MaxX - component.MinX + 1;
+            var componentHeight = component.MaxY - component.MinY + 1;
+            var componentArea = Mathf.Max(1, componentWidth * componentHeight);
+            var frameCoverage = componentArea / (float)totalArea;
+            var markerSize = Mathf.Max(componentWidth / (float)gridWidth, componentHeight / (float)gridHeight);
+            var aspect = componentWidth / (float)Mathf.Max(1, componentHeight);
+            var aspectLimit = Mathf.Max(1f, maxCheckerAspect);
+            var aspectOk = aspect <= aspectLimit && aspect >= 1f / aspectLimit;
+
+            if (markerSize < minCheckerSize
+                || markerSize > maxCheckerSize
+                || component.Density < minCheckerEdgeDensity
+                || !aspectOk)
+            {
+                continue;
+            }
+
+            component.Score = frameCoverage + component.Density * 1.4f;
+            if (!bestComponent.Found || component.Score > bestComponent.Score)
+            {
+                bestComponent = component;
             }
         }
 
-        var patternScore = matches / (float)total;
-        var contrastScore = Mathf.Clamp01(contrast / 90f);
-        return patternScore * 0.8f + contrastScore * 0.2f;
+        return bestComponent;
+    }
+
+    private CheckerContrastComponent ReadCheckerContrastComponent(int startIndex, int gridWidth, int gridHeight)
+    {
+        var result = new CheckerContrastComponent();
+        var head = 0;
+        var tail = 0;
+        var minX = gridWidth;
+        var maxX = 0;
+        var minY = gridHeight;
+        var maxY = 0;
+        var edgeCount = 0;
+
+        componentQueue[tail++] = startIndex;
+        visitedCells[startIndex] = 1;
+
+        while (head < tail)
+        {
+            var index = componentQueue[head++];
+            var x = index % gridWidth;
+            var y = index / gridWidth;
+
+            minX = Mathf.Min(minX, x);
+            maxX = Mathf.Max(maxX, x);
+            minY = Mathf.Min(minY, y);
+            maxY = Mathf.Max(maxY, y);
+            edgeCount++;
+
+            AddWhiteNeighbor(index - 1, x > 0, ref tail);
+            AddWhiteNeighbor(index + 1, x < gridWidth - 1, ref tail);
+            AddWhiteNeighbor(index - gridWidth, y > 0, ref tail);
+            AddWhiteNeighbor(index + gridWidth, y < gridHeight - 1, ref tail);
+        }
+
+        var componentWidth = maxX - minX + 1;
+        var componentHeight = maxY - minY + 1;
+        var area = Mathf.Max(1, componentWidth * componentHeight);
+
+        result.Found = edgeCount >= 24;
+        result.MinX = minX;
+        result.MaxX = maxX;
+        result.MinY = minY;
+        result.MaxY = maxY;
+        result.EdgeCount = edgeCount;
+        result.Density = edgeCount / (float)area;
+        return result;
     }
 
     private int ReadGridLuminance(int gridX, int gridY)

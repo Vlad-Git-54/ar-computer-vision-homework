@@ -2830,14 +2830,11 @@ MonoBehaviour:
   requestedFps: 30
   brightThreshold: 128
   sampleStep: 6
-  minCheckerCells: 4
-  maxCheckerCells: 12
-  checkerSearchStride: 8
-  minCheckerContrast: 38
-  minCheckerScore: 0.74
+  minCheckerContrast: 42
+  minCheckerEdgeDensity: 0.045
   minCheckerSize: 0.08
   maxCheckerSize: 0.92
-  maxCheckerAspectStretch: 1.45
+  maxCheckerAspect: 4.2
   minMarkerSize: 0.1
   maxMarkerSize: 0.92
   minWhiteArea: 0.035
@@ -2856,7 +2853,7 @@ MonoBehaviour:
   fallbackGameplayWidth: 24
   fallbackGameplayDepth: 18
   markerGamePadding: 0.86
-  minMarkerGameScale: 0.01
+  minMarkerGameScale: 0.08
   maxMarkerGameScale: 1.1
   markerPlacementSmoothness: 6
   markerBoundsSmoothness: 8
