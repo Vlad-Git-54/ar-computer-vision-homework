@@ -348,10 +348,13 @@ MonoBehaviour:
   requestedFps: 30
   sampleStep: 5
   edgeThreshold: 72
+  darkObjectThreshold: 125
   minimumEdgeCells: 32
   minimumContourSize: 0.07
   maximumContourSize: 0.78
   minimumEdgeDensity: 0.035
+  minimumObjectFill: 0.18
+  maximumObjectFill: 0.86
   movementSpeed: 3.8
   worldXRange: {x: -4.6, y: 4.6}
   worldZRange: {x: -2.8, y: 2.8}

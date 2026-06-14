@@ -14,10 +14,13 @@ public class WebcamContourFollower : MonoBehaviour
     [SerializeField] private int requestedFps = 30;
     [SerializeField] private int sampleStep = 5;
     [SerializeField] private int edgeThreshold = 72;
+    [SerializeField] private int darkObjectThreshold = 125;
     [SerializeField] private int minimumEdgeCells = 32;
     [SerializeField] private float minimumContourSize = 0.07f;
     [SerializeField] private float maximumContourSize = 0.78f;
     [SerializeField] private float minimumEdgeDensity = 0.035f;
+    [SerializeField] private float minimumObjectFill = 0.18f;
+    [SerializeField] private float maximumObjectFill = 0.86f;
     [SerializeField] private float movementSpeed = 3.8f;
     [SerializeField] private Vector2 worldXRange = new Vector2(-4.6f, 4.6f);
     [SerializeField] private Vector2 worldZRange = new Vector2(-2.8f, 2.8f);
@@ -87,7 +90,7 @@ public class WebcamContourFollower : MonoBehaviour
         CreateInterface();
         StartWebcam();
         currentTarget = followerObject != null ? followerObject.position : Vector3.zero;
-        UpdateStatus("Поднесите объект с четким контуром к веб-камере");
+        UpdateStatus("Поднесите темный объект на светлом фоне к веб-камере");
     }
 
     private void Update()
@@ -99,7 +102,7 @@ public class WebcamContourFollower : MonoBehaviour
             currentTarget = ConvertContourToWorld(contour);
             MoveFollowerToTarget();
             UpdateContourBox(contour, true);
-            UpdateStatus("Контур найден. 3D-объект движется к нему");
+            UpdateStatus("Контур найден. 3D-объект движется к найденному объекту");
             return;
         }
 
@@ -288,7 +291,13 @@ public class WebcamContourFollower : MonoBehaviour
         Array.Clear(edgeCells, 0, totalCells);
         Array.Clear(visitedCells, 0, totalCells);
 
-        BuildRawEdgeMap(gridWidth, gridHeight, textureWidth, textureHeight);
+        var foregroundCells = BuildForegroundMap(gridWidth, gridHeight, textureWidth, textureHeight);
+        if (foregroundCells < minimumEdgeCells)
+        {
+            currentHint = "Покажите темный предмет на белом листе или светлой стене";
+            return false;
+        }
+
         ExpandEdgeMap(gridWidth, gridHeight);
 
         var bestScore = 0f;
@@ -319,7 +328,7 @@ public class WebcamContourFollower : MonoBehaviour
 
         if (!bestContour.Found)
         {
-            currentHint = "Покажите камере объект с контрастными краями";
+            currentHint = "Покажите один крупный темный объект на светлом фоне";
             return false;
         }
 
@@ -328,24 +337,44 @@ public class WebcamContourFollower : MonoBehaviour
         return true;
     }
 
-    private void BuildRawEdgeMap(int gridWidth, int gridHeight, int textureWidth, int textureHeight)
+    private int BuildForegroundMap(int gridWidth, int gridHeight, int textureWidth, int textureHeight)
     {
+        var luminanceSum = 0f;
+        var sampleCount = 0;
+
         for (var y = 1; y < gridHeight - 1; y++)
         {
             for (var x = 1; x < gridWidth - 1; x++)
             {
                 var pixelX = Mathf.Clamp(x * sampleStep, 1, textureWidth - 2);
                 var pixelY = Mathf.Clamp(y * sampleStep, 1, textureHeight - 2);
-                var horizontalEdge = Mathf.Abs(GetLuminance(pixelX + sampleStep, pixelY, textureWidth, textureHeight) - GetLuminance(pixelX - sampleStep, pixelY, textureWidth, textureHeight));
-                var verticalEdge = Mathf.Abs(GetLuminance(pixelX, pixelY + sampleStep, textureWidth, textureHeight) - GetLuminance(pixelX, pixelY - sampleStep, textureWidth, textureHeight));
-                var edgeStrength = horizontalEdge + verticalEdge;
+                luminanceSum += GetLuminance(pixelX, pixelY, textureWidth, textureHeight);
+                sampleCount++;
+            }
+        }
 
-                if (edgeStrength >= edgeThreshold)
+        var averageLuminance = sampleCount > 0 ? luminanceSum / sampleCount : darkObjectThreshold;
+        var adaptiveThreshold = Mathf.RoundToInt(averageLuminance - edgeThreshold * 0.45f);
+        var threshold = Mathf.Clamp(Mathf.Min(darkObjectThreshold, adaptiveThreshold), 0, 255);
+        var foregroundCells = 0;
+
+        for (var y = 1; y < gridHeight - 1; y++)
+        {
+            for (var x = 1; x < gridWidth - 1; x++)
+            {
+                var pixelX = Mathf.Clamp(x * sampleStep, 1, textureWidth - 2);
+                var pixelY = Mathf.Clamp(y * sampleStep, 1, textureHeight - 2);
+                var luminance = GetLuminance(pixelX, pixelY, textureWidth, textureHeight);
+
+                if (luminance <= threshold)
                 {
                     rawEdgeCells[y * gridWidth + x] = 1;
+                    foregroundCells++;
                 }
             }
         }
+
+        return foregroundCells;
     }
 
     private void ExpandEdgeMap(int gridWidth, int gridHeight)
@@ -459,7 +488,8 @@ public class WebcamContourFollower : MonoBehaviour
         var normalizedWidth = cellWidth / (float)gridWidth;
         var normalizedHeight = cellHeight / (float)gridHeight;
         var area = cellWidth * cellHeight;
-        var density = contour.EdgeCount / Mathf.Max(1f, area);
+        var fill = contour.EdgeCount / Mathf.Max(1f, area);
+        var minimumFill = Mathf.Max(minimumEdgeDensity, minimumObjectFill);
 
         if (normalizedWidth < minimumContourSize || normalizedHeight < minimumContourSize)
         {
@@ -471,12 +501,12 @@ public class WebcamContourFollower : MonoBehaviour
             return false;
         }
 
-        if (density < minimumEdgeDensity)
+        if (fill < minimumFill || fill > maximumObjectFill)
         {
             return false;
         }
 
-        score = contour.EdgeCount + area * 0.18f;
+        score = contour.EdgeCount + area * 0.12f;
         return true;
     }
 
