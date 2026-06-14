@@ -11,17 +11,17 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 480;
     [SerializeField] private int requestedFps = 30;
-    [SerializeField] private int brightThreshold = 135;
+    [SerializeField] private int brightThreshold = 128;
     [SerializeField] private int sampleStep = 6;
     [SerializeField] private float minMarkerSize = 0.1f;
     [SerializeField] private float maxMarkerSize = 0.92f;
-    [SerializeField] private float minWhiteArea = 0.04f;
-    [SerializeField] private float minMarkerDensity = 0.56f;
-    [SerializeField] private float minCenterFill = 0.5f;
-    [SerializeField] private float minCornerFill = 0.34f;
-    [SerializeField] private float maxSheetLuminanceDeviation = 48f;
-    [SerializeField] private int stableFramesToShow = 6;
-    [SerializeField] private float markerLostDelay = 1.2f;
+    [SerializeField] private float minWhiteArea = 0.035f;
+    [SerializeField] private float minMarkerDensity = 0.5f;
+    [SerializeField] private float minCenterFill = 0.44f;
+    [SerializeField] private float minCornerFill = 0.28f;
+    [SerializeField] private float maxSheetLuminanceDeviation = 60f;
+    [SerializeField] private int stableFramesToShow = 4;
+    [SerializeField] private float markerLostDelay = 2f;
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: белый лист А4";
     [SerializeField] private bool setupSceneAutomatically = true;
@@ -401,7 +401,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         var maxChannel = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
         var minChannel = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
-        return luminance >= brightThreshold && minChannel >= 92 && maxChannel - minChannel <= 82;
+        return luminance >= brightThreshold && minChannel >= 84 && maxChannel - minChannel <= 94;
     }
 
     private Color32 ReadAverageCellColor(int startX, int startY, int imageWidth, int imageHeight)
@@ -512,7 +512,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var area = Mathf.Max(1, componentWidth * componentHeight);
         var averageLuminance = CountLuminanceCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
 
-        result.Found = whiteCount >= 60;
+        result.Found = whiteCount >= 45;
         result.MinX = minX;
         result.MaxX = maxX;
         result.MinY = minY;
@@ -640,8 +640,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.42f;
-        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.28f;
+        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.5f;
+        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.34f;
         return Mathf.Clamp01(Mathf.Max(landscapeScore, portraitScore));
     }
 

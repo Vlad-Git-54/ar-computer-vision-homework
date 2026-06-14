@@ -1848,7 +1848,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 48
+  field of view: 54
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -1873,8 +1873,8 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
-  m_LocalRotation: {x: 0.18910755, y: 0, z: 0, w: 0.9819564}
-  m_LocalPosition: {x: 0, y: 4.05, z: -14}
+  m_LocalRotation: {x: 0.2667116, y: 0, z: 0, w: 0.96377605}
+  m_LocalPosition: {x: 0, y: 5.4, z: -8.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -1893,9 +1893,10 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   target: {fileID: 904069538}
-  offset: {x: 0, y: 4, z: -7}
+  offset: {x: 0, y: 5.4, z: -8.4}
   followSpeed: 7
-  lookHeight: 1.2
+  lookHeight: 1
+  followTargetRotation: 0
 --- !u!1001 &966987845
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2827,17 +2828,17 @@ MonoBehaviour:
   requestedWidth: 640
   requestedHeight: 480
   requestedFps: 30
-  brightThreshold: 135
+  brightThreshold: 128
   sampleStep: 6
   minMarkerSize: 0.1
   maxMarkerSize: 0.92
-  minWhiteArea: 0.04
-  minMarkerDensity: 0.56
-  minCenterFill: 0.5
-  minCornerFill: 0.34
-  maxSheetLuminanceDeviation: 48
-  stableFramesToShow: 6
-  markerLostDelay: 1.2
+  minWhiteArea: 0.035
+  minMarkerDensity: 0.5
+  minCenterFill: 0.44
+  minCornerFill: 0.28
+  maxSheetLuminanceDeviation: 60
+  stableFramesToShow: 4
+  markerLostDelay: 2
   keepGameVisibleAfterTrigger: 0
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"
   setupSceneAutomatically: 1
