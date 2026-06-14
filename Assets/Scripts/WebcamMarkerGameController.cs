@@ -11,16 +11,16 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 480;
     [SerializeField] private int requestedFps = 30;
-    [SerializeField] private int brightThreshold = 178;
+    [SerializeField] private int brightThreshold = 158;
     [SerializeField] private int sampleStep = 4;
     [SerializeField] private float minMarkerSize = 0.18f;
     [SerializeField] private float maxMarkerSize = 0.95f;
-    [SerializeField] private float minMarkerDensity = 0.68f;
-    [SerializeField] private float maxDarkMarkerDensity = 0.12f;
+    [SerializeField] private float minMarkerDensity = 0.4f;
+    [SerializeField] private float maxDarkMarkerDensity = 0.2f;
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
     [SerializeField] private float gameScaleAtMarker = 0.22f;
     [SerializeField] private float followSharpness = 8f;
-    [SerializeField] private float markerLostDelay = 0.45f;
+    [SerializeField] private float markerLostDelay = 1.25f;
     [SerializeField] private string markerHelpText = "Маркер: чистый белый лист А4";
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 arCameraPosition = new Vector3(0f, 2.8f, -2.5f);
@@ -29,6 +29,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private WebCamTexture webcamTexture;
     private Color32[] cameraPixels;
     private byte[] brightMarkerCells;
+    private byte[] smoothedBrightMarkerCells;
     private byte[] darkMarkerCells;
     private byte[] visitedMarkerCells;
     private int[] componentQueue;
@@ -38,6 +39,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     private Text helpText;
     private bool gameVisible;
     private bool markerWasFound;
+    private MarkerObservation lastStableMarker;
     private float lastMarkerFoundTime = -10f;
     private Sprite whiteSprite;
 
@@ -98,10 +100,15 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             lastMarkerFoundTime = Time.unscaledTime;
             markerWasFound = true;
-            PlaceGameOnMarker(marker);
+            lastStableMarker = marker;
         }
 
         var markerIsVisible = Time.unscaledTime - lastMarkerFoundTime <= markerLostDelay;
+        if (markerIsVisible && lastStableMarker.Found)
+        {
+            PlaceGameOnMarker(lastStableMarker);
+        }
+
         SetGameVisible(markerIsVisible, !markerIsVisible && Time.frameCount % 15 == 0);
 
         if (markerIsVisible)
@@ -285,11 +292,10 @@ public class WebcamMarkerGameController : MonoBehaviour
         for (var gridY = 0; gridY < gridHeight; gridY++)
         {
             var y = gridY * sampleStep;
-            var lineStart = y * width;
             for (var gridX = 0; gridX < gridWidth; gridX++)
             {
                 var x = gridX * sampleStep;
-                var color = cameraPixels[lineStart + x];
+                var color = ReadAverageCellColor(x, y, width, height);
                 var luminance = (color.r * 30 + color.g * 59 + color.b * 11) / 100;
                 var cellIndex = gridY * gridWidth + gridX;
 
@@ -305,6 +311,7 @@ public class WebcamMarkerGameController : MonoBehaviour
             }
         }
 
+        SmoothBrightMarkerGrid(gridWidth, gridHeight);
         var bestObservation = FindBestBrightMarkerComponent(gridWidth, gridHeight, width, height);
 
         if (!bestObservation.Found)
@@ -320,6 +327,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         if (brightMarkerCells == null || brightMarkerCells.Length != gridLength)
         {
             brightMarkerCells = new byte[gridLength];
+            smoothedBrightMarkerCells = new byte[gridLength];
             darkMarkerCells = new byte[gridLength];
             visitedMarkerCells = new byte[gridLength];
             componentQueue = new int[gridLength];
@@ -327,13 +335,93 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         Array.Clear(brightMarkerCells, 0, gridLength);
+        Array.Clear(smoothedBrightMarkerCells, 0, gridLength);
         Array.Clear(darkMarkerCells, 0, gridLength);
         Array.Clear(visitedMarkerCells, 0, gridLength);
     }
 
     private bool IsBrightMarkerPixel(Color32 color, int luminance)
     {
-        return luminance >= brightThreshold && color.r >= 118 && color.g >= 118 && color.b >= 118;
+        var maxChannel = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
+        var minChannel = Mathf.Min(color.r, Mathf.Min(color.g, color.b));
+        return luminance >= brightThreshold && minChannel >= 96 && maxChannel - minChannel <= 92;
+    }
+
+    private Color32 ReadAverageCellColor(int startX, int startY, int imageWidth, int imageHeight)
+    {
+        var endX = Mathf.Min(startX + sampleStep, imageWidth);
+        var endY = Mathf.Min(startY + sampleStep, imageHeight);
+        var red = 0;
+        var green = 0;
+        var blue = 0;
+        var count = 0;
+
+        for (var y = startY; y < endY; y++)
+        {
+            var lineStart = y * imageWidth;
+            for (var x = startX; x < endX; x++)
+            {
+                var color = cameraPixels[lineStart + x];
+                red += color.r;
+                green += color.g;
+                blue += color.b;
+                count++;
+            }
+        }
+
+        count = Mathf.Max(1, count);
+        return new Color32((byte)(red / count), (byte)(green / count), (byte)(blue / count), 255);
+    }
+
+    private void SmoothBrightMarkerGrid(int gridWidth, int gridHeight)
+    {
+        for (var y = 0; y < gridHeight; y++)
+        {
+            for (var x = 0; x < gridWidth; x++)
+            {
+                var index = y * gridWidth + x;
+                if (brightMarkerCells[index] != 0)
+                {
+                    smoothedBrightMarkerCells[index] = 1;
+                    continue;
+                }
+
+                smoothedBrightMarkerCells[index] = CountBrightNeighbors(x, y, gridWidth, gridHeight) >= 3 ? (byte)1 : (byte)0;
+            }
+        }
+
+        Array.Copy(smoothedBrightMarkerCells, brightMarkerCells, brightMarkerCells.Length);
+    }
+
+    private int CountBrightNeighbors(int x, int y, int gridWidth, int gridHeight)
+    {
+        var count = 0;
+        for (var offsetY = -1; offsetY <= 1; offsetY++)
+        {
+            var currentY = y + offsetY;
+            if (currentY < 0 || currentY >= gridHeight)
+            {
+                continue;
+            }
+
+            for (var offsetX = -1; offsetX <= 1; offsetX++)
+            {
+                if (offsetX == 0 && offsetY == 0)
+                {
+                    continue;
+                }
+
+                var currentX = x + offsetX;
+                if (currentX < 0 || currentX >= gridWidth)
+                {
+                    continue;
+                }
+
+                count += brightMarkerCells[currentY * gridWidth + currentX];
+            }
+        }
+
+        return count;
     }
 
     private MarkerObservation FindBestBrightMarkerComponent(int gridWidth, int gridHeight, int imageWidth, int imageHeight)
@@ -415,7 +503,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var brightDensity = brightCount / (float)area;
         var darkDensity = CountDarkCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
 
-        result.Found = brightCount >= 160 && brightDensity >= minMarkerDensity && darkDensity <= maxDarkMarkerDensity;
+        result.Found = brightCount >= 110 && brightDensity >= minMarkerDensity && darkDensity <= maxDarkMarkerDensity;
         result.MinX = minX;
         result.MaxX = maxX;
         result.MinY = minY;
@@ -478,15 +566,15 @@ public class WebcamMarkerGameController : MonoBehaviour
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        return Mathf.Abs(aspect - landscapeA4) <= 0.55f || Mathf.Abs(aspect - portraitA4) <= 0.3f;
+        return Mathf.Abs(aspect - landscapeA4) <= 0.42f || Mathf.Abs(aspect - portraitA4) <= 0.24f;
     }
 
     private float GetA4AspectScore(float aspect)
     {
         const float landscapeA4 = 1.414f;
         const float portraitA4 = 0.707f;
-        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.55f;
-        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.3f;
+        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.42f;
+        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.24f;
         return Mathf.Clamp01(Mathf.Max(landscapeScore, portraitScore));
     }
 
