@@ -780,9 +780,10 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   targetObjectName: Robot Player
-  moveSpeed: 3.25
-  rotationSpeed: 9
-  stopDistance: 0.08
+  moveSpeed: 0.9
+  rotationSpeed: 4.5
+  stopDistance: 0.75
+  startDelay: 3
   animator: {fileID: 0}
   speedParameter: MoveSpeed
   movingParameter: IsMoving
@@ -2835,6 +2836,7 @@ MonoBehaviour:
   minCheckerSize: 0.08
   maxCheckerSize: 0.92
   maxCheckerAspect: 4.2
+  detectedTabletContourPadding: {x: 0.32, y: 0.24}
   minMarkerSize: 0.1
   maxMarkerSize: 0.92
   minWhiteArea: 0.035
@@ -2846,7 +2848,7 @@ MonoBehaviour:
   markerLostDelay: 2
   keepGameVisibleAfterTrigger: 0
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0448\u0430\u0445\u043C\u0430\u0442\u043D\u0430\u044F \u0434\u043E\u0441\u043A\u0430 \u043B\u044E\u0431\u043E\u0433\u043E \u0440\u0430\u0437\u043C\u0435\u0440\u0430"
-  useFixedTabletMarkerPlacement: 1
+  useFixedTabletMarkerPlacement: 0
   fixedTabletMarkerMin: {x: 0.35, y: 0.38}
   fixedTabletMarkerMax: {x: 0.71, y: 0.70}
   alignSceneCameraWithWebcam: 1

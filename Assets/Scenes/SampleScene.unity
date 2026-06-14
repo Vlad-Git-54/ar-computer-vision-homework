@@ -780,9 +780,10 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   targetObjectName: Robot Player
-  moveSpeed: 3.25
-  rotationSpeed: 9
-  stopDistance: 0.08
+  moveSpeed: 0.9
+  rotationSpeed: 4.5
+  stopDistance: 0.75
+  startDelay: 3
   animator: {fileID: 0}
   speedParameter: MoveSpeed
   movingParameter: IsMoving

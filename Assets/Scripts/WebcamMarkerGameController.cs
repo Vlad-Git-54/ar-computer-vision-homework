@@ -18,6 +18,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float minCheckerSize = 0.08f;
     [SerializeField] private float maxCheckerSize = 0.92f;
     [SerializeField] private float maxCheckerAspect = 4.2f;
+    [SerializeField] private Vector2 detectedTabletContourPadding = new Vector2(0.32f, 0.24f);
     [SerializeField] private float minMarkerSize = 0.1f;
     [SerializeField] private float maxMarkerSize = 0.92f;
     [SerializeField] private float minWhiteArea = 0.035f;
@@ -29,7 +30,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float markerLostDelay = 2f;
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: шахматная доска любого размера";
-    [SerializeField] private bool useFixedTabletMarkerPlacement = true;
+    [SerializeField] private bool useFixedTabletMarkerPlacement = false;
     [SerializeField] private Vector2 fixedTabletMarkerMin = new Vector2(0.35f, 0.38f);
     [SerializeField] private Vector2 fixedTabletMarkerMax = new Vector2(0.71f, 0.70f);
     [SerializeField] private bool alignSceneCameraWithWebcam = true;
@@ -662,17 +663,18 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         var componentWidth = bestComponent.MaxX - bestComponent.MinX + 1;
         var componentHeight = bestComponent.MaxY - bestComponent.MinY + 1;
-        var padding = Mathf.Max(3, Mathf.RoundToInt(Mathf.Max(componentWidth, componentHeight) * 0.08f));
+        var paddingX = Mathf.Max(3, Mathf.RoundToInt(componentWidth * detectedTabletContourPadding.x));
+        var paddingY = Mathf.Max(3, Mathf.RoundToInt(componentHeight * detectedTabletContourPadding.y));
 
         return new CheckerboardMarkerCandidate
         {
             Found = true,
             Score = bestComponent.Score,
             Contrast = minCheckerContrast,
-            MinGridX = Mathf.Clamp(bestComponent.MinX - padding, 0, gridWidth),
-            MaxGridX = Mathf.Clamp(bestComponent.MaxX + padding + 1, 0, gridWidth),
-            MinGridY = Mathf.Clamp(bestComponent.MinY - padding, 0, gridHeight),
-            MaxGridY = Mathf.Clamp(bestComponent.MaxY + padding + 1, 0, gridHeight)
+            MinGridX = Mathf.Clamp(bestComponent.MinX - paddingX, 0, gridWidth),
+            MaxGridX = Mathf.Clamp(bestComponent.MaxX + paddingX + 1, 0, gridWidth),
+            MinGridY = Mathf.Clamp(bestComponent.MinY - paddingY, 0, gridHeight),
+            MaxGridY = Mathf.Clamp(bestComponent.MaxY + paddingY + 1, 0, gridHeight)
         };
     }
 

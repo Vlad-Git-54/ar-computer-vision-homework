@@ -7,9 +7,10 @@ using UnityEngine;
 public class EnemyRobotChaser : MonoBehaviour
 {
     [SerializeField] private string targetObjectName = "Robot Player";
-    [SerializeField] private float moveSpeed = 3.25f;
-    [SerializeField] private float rotationSpeed = 9f;
-    [SerializeField] private float stopDistance = 0.08f;
+    [SerializeField] private float moveSpeed = 0.9f;
+    [SerializeField] private float rotationSpeed = 4.5f;
+    [SerializeField] private float stopDistance = 0.75f;
+    [SerializeField] private float startDelay = 3f;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
     [SerializeField] private string movingParameter = "IsMoving";
@@ -18,6 +19,7 @@ public class EnemyRobotChaser : MonoBehaviour
     private Rigidbody enemyRigidbody;
     private Transform target;
     private Renderer[] renderers;
+    private float canStartChasingTime;
 
     private void Awake()
     {
@@ -39,10 +41,17 @@ public class EnemyRobotChaser : MonoBehaviour
         renderers = GetComponentsInChildren<Renderer>(true);
         ApplyColor(enemyColor);
         FindTarget();
+        canStartChasingTime = Time.time + startDelay;
     }
 
     private void FixedUpdate()
     {
+        if (Time.time < canStartChasingTime)
+        {
+            SetAnimationSpeed(0f);
+            return;
+        }
+
         if (target == null)
         {
             FindTarget();
