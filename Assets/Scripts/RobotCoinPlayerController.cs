@@ -12,6 +12,8 @@ public class RobotCoinPlayerController : MonoBehaviour
     [SerializeField] private float minimumGameplaySpeedScale = 0.45f;
     [SerializeField] private float maximumGameplaySpeedScale = 1.5f;
     [SerializeField] private float fallLoseHeight = -3f;
+    [SerializeField] private float edgeFallMargin = 0.25f;
+    [SerializeField] private float edgeFallDownSpeed = 2.6f;
     [SerializeField] private float rotateSpeed = 130f;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
@@ -32,6 +34,8 @@ public class RobotCoinPlayerController : MonoBehaviour
     private float rotateInput;
     private bool fallLossTriggered;
     private Transform gameplayFloor;
+    private CapsuleCollider playerCollider;
+    private bool fallingOffField;
 
     public float MoveSpeed => moveSpeed;
 
@@ -60,6 +64,7 @@ public class RobotCoinPlayerController : MonoBehaviour
         robotRigidbody.useGravity = true;
         robotRigidbody.freezeRotation = true;
         robotRigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        playerCollider = GetComponent<CapsuleCollider>();
 
         if (animator == null)
         {
@@ -91,10 +96,21 @@ public class RobotCoinPlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        if (fallingOffField)
+        {
+            return;
+        }
+
         var rotation = Quaternion.Euler(0f, rotateInput * rotateSpeed * Time.fixedDeltaTime, 0f);
         robotRigidbody.MoveRotation(robotRigidbody.rotation * rotation);
 
         var movement = CreateScaledMovement(transform.forward * moveInput, 1f, Time.fixedDeltaTime);
+        if (ShouldFallFromGameplayFloor(robotRigidbody.position, movement, out var fallDirection))
+        {
+            StartFallingFromField(fallDirection);
+            return;
+        }
+
         var velocity = robotRigidbody.velocity;
         robotRigidbody.velocity = new Vector3(movement.x / Time.fixedDeltaTime, velocity.y, movement.z / Time.fixedDeltaTime);
     }
@@ -162,6 +178,80 @@ public class RobotCoinPlayerController : MonoBehaviour
     {
         var floorObject = GameObject.Find(gameplayFloorName);
         gameplayFloor = floorObject != null ? floorObject.transform : null;
+    }
+
+    private bool ShouldFallFromGameplayFloor(Vector3 currentPosition, Vector3 movement, out Vector3 fallDirection)
+    {
+        fallDirection = Vector3.zero;
+        if (gameplayFloor == null)
+        {
+            FindGameplayFloor();
+        }
+
+        if (gameplayFloor == null || movement.sqrMagnitude <= 0.000001f)
+        {
+            return false;
+        }
+
+        var nextPosition = currentPosition + movement;
+        var currentLocal = gameplayFloor.InverseTransformPoint(currentPosition);
+        var nextLocal = gameplayFloor.InverseTransformPoint(nextPosition);
+        var localMovement = nextLocal - currentLocal;
+        var marginX = edgeFallMargin / Mathf.Max(0.001f, Mathf.Abs(gameplayFloor.lossyScale.x));
+        var marginZ = edgeFallMargin / Mathf.Max(0.001f, Mathf.Abs(gameplayFloor.lossyScale.z));
+        var minX = -0.5f + marginX;
+        var maxX = 0.5f - marginX;
+        var minZ = -0.5f + marginZ;
+        var maxZ = 0.5f - marginZ;
+        var localFallDirection = Vector3.zero;
+
+        if (nextLocal.x <= minX && localMovement.x < 0f)
+        {
+            localFallDirection.x = -1f;
+        }
+        else if (nextLocal.x >= maxX && localMovement.x > 0f)
+        {
+            localFallDirection.x = 1f;
+        }
+
+        if (nextLocal.z <= minZ && localMovement.z < 0f)
+        {
+            localFallDirection.z = -1f;
+        }
+        else if (nextLocal.z >= maxZ && localMovement.z > 0f)
+        {
+            localFallDirection.z = 1f;
+        }
+
+        if (localFallDirection.sqrMagnitude <= 0.001f)
+        {
+            return false;
+        }
+
+        fallDirection = Vector3.ProjectOnPlane(gameplayFloor.TransformDirection(localFallDirection), Vector3.up);
+        if (fallDirection.sqrMagnitude <= 0.001f)
+        {
+            fallDirection = Vector3.ProjectOnPlane(movement, Vector3.up);
+        }
+
+        return fallDirection.sqrMagnitude > 0.001f;
+    }
+
+    private void StartFallingFromField(Vector3 fallDirection)
+    {
+        fallingOffField = true;
+        moveInput = 0f;
+        rotateInput = 0f;
+
+        if (playerCollider != null)
+        {
+            playerCollider.enabled = false;
+        }
+
+        robotRigidbody.detectCollisions = false;
+        robotRigidbody.useGravity = true;
+        var outwardVelocity = fallDirection.normalized * GetScaledAnimationSpeed(1f);
+        robotRigidbody.velocity = outwardVelocity + Vector3.down * edgeFallDownSpeed;
     }
 
     private void CheckFallLoss()

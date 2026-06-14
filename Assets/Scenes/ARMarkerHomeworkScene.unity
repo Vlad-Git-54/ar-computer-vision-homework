@@ -1749,6 +1749,8 @@ MonoBehaviour:
   minimumGameplaySpeedScale: 0.45
   maximumGameplaySpeedScale: 1.5
   fallLoseHeight: -3
+  edgeFallMargin: 0.25
+  edgeFallDownSpeed: 2.6
   rotateSpeed: 130
   animator: {fileID: 0}
   speedParameter: MoveSpeed
