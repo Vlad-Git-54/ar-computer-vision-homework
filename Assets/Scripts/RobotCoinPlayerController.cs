@@ -95,7 +95,8 @@ public class RobotCoinPlayerController : MonoBehaviour
         robotRigidbody.MoveRotation(robotRigidbody.rotation * rotation);
 
         var movement = CreateScaledMovement(transform.forward * moveInput, 1f, Time.fixedDeltaTime);
-        robotRigidbody.MovePosition(robotRigidbody.position + movement);
+        var velocity = robotRigidbody.velocity;
+        robotRigidbody.velocity = new Vector3(movement.x / Time.fixedDeltaTime, velocity.y, movement.z / Time.fixedDeltaTime);
     }
 
     private void ReadMovementInput()

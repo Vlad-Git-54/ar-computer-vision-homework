@@ -57,7 +57,7 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int markerRenderTextureHeight = 720;
     [SerializeField] private float markerOverlayDepth = 28f;
     [SerializeField] private float markerViewportPadding = 0.92f;
-    [SerializeField] private float markerOverlayCameraPadding = 1.1f;
+    [SerializeField] private float markerOverlayCameraPadding = 1f;
     [SerializeField] private Vector3 markerOverlayCameraRotation = new Vector3(90f, 0f, 0f);
 
     private WebCamTexture webcamTexture;
@@ -479,10 +479,11 @@ public class WebcamMarkerGameController : MonoBehaviour
         var meshFilter = markerOverlayObject.AddComponent<MeshFilter>();
         meshFilter.sharedMesh = markerOverlayMesh;
 
-        markerOverlayMaterial = new Material(Shader.Find("Unlit/Texture"));
+        markerOverlayMaterial = new Material(FindOverlayShader());
         markerOverlayMaterial.name = "AR Marker Game Overlay Material";
         markerOverlayMaterial.mainTexture = markerGameTexture;
         markerOverlayMaterial.renderQueue = 3000;
+        ConfigureTransparentOverlayMaterial(markerOverlayMaterial);
 
         var meshRenderer = markerOverlayObject.AddComponent<MeshRenderer>();
         meshRenderer.sharedMaterial = markerOverlayMaterial;
@@ -510,6 +511,28 @@ public class WebcamMarkerGameController : MonoBehaviour
         {
             AssignLayerRecursively(child.gameObject, layer);
         }
+    }
+
+    private Shader FindOverlayShader()
+    {
+        var shader = Shader.Find("Unlit/Transparent");
+        if (shader != null)
+        {
+            return shader;
+        }
+
+        shader = Shader.Find("Sprites/Default");
+        return shader != null ? shader : Shader.Find("Unlit/Texture");
+    }
+
+    private void ConfigureTransparentOverlayMaterial(Material material)
+    {
+        material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        material.SetInt("_ZWrite", 0);
+        material.DisableKeyword("_ALPHATEST_ON");
+        material.EnableKeyword("_ALPHABLEND_ON");
+        material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
     }
 
     private void AlignSceneCameraWithWebcam()
