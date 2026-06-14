@@ -11,6 +11,7 @@ public class GameplayHudPauseController : MonoBehaviour
     [SerializeField] private string menuSceneName = "MainMenuScene";
 
     private PlayerHealth playerHealth;
+    private GameObject healthPanel;
     private Image healthFill;
     private Text healthText;
     private GameObject pausePanel;
@@ -106,19 +107,25 @@ public class GameplayHudPauseController : MonoBehaviour
 
         canvasObject.AddComponent<GraphicRaycaster>();
 
-        CreateHealthHud(canvasObject.transform);
         CreatePauseMenu(canvasObject.transform);
+        CreateHealthHud(canvasObject.transform);
     }
 
     private void CreateHealthHud(Transform parent)
     {
-        var panel = CreateRect("Health HUD", parent, new Vector2(24f, -24f), new Vector2(320f, 76f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+        var panel = CreateRect("Health HUD", parent, new Vector2(30f, -30f), new Vector2(360f, 92f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+        healthPanel = panel.gameObject;
 
-        var title = CreateText("Health Title", panel, "Здоровье", 22, TextAnchor.UpperLeft, Color.white);
-        SetStretch(title.rectTransform, new Vector2(0f, 38f), new Vector2(0f, 0f));
+        var panelBack = healthPanel.AddComponent<Image>();
+        panelBack.sprite = whiteSprite;
+        panelBack.color = new Color(0.04f, 0.06f, 0.08f, 0.82f);
+
+        var title = CreateText("Health Title", panel, "Здоровье игрока", 22, TextAnchor.MiddleLeft, Color.white);
+        title.fontStyle = FontStyle.Bold;
+        SetStretch(title.rectTransform, new Vector2(18f, 48f), new Vector2(18f, 8f));
 
         var barBack = CreateImage("Health Bar Background", panel, new Color(0.08f, 0.09f, 0.12f, 0.9f));
-        SetStretch(barBack.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 34f));
+        SetStretch(barBack.rectTransform, new Vector2(18f, 14f), new Vector2(18f, 46f));
 
         healthFill = CreateImage("Health Bar Fill", barBack.transform, new Color(0.18f, 0.85f, 0.42f, 1f));
         healthFill.type = Image.Type.Filled;
@@ -127,7 +134,10 @@ public class GameplayHudPauseController : MonoBehaviour
         SetStretch(healthFill.rectTransform, new Vector2(4f, 4f), new Vector2(4f, 4f));
 
         healthText = CreateText("Health Value", barBack.transform, "100 / 100", 20, TextAnchor.MiddleCenter, Color.white);
+        healthText.fontStyle = FontStyle.Bold;
         SetStretch(healthText.rectTransform, Vector2.zero, Vector2.zero);
+
+        healthPanel.transform.SetAsLastSibling();
     }
 
     private void CreatePauseMenu(Transform parent)
@@ -150,7 +160,7 @@ public class GameplayHudPauseController : MonoBehaviour
         boxRect.anchorMin = new Vector2(0.5f, 0.5f);
         boxRect.anchorMax = new Vector2(0.5f, 0.5f);
         boxRect.pivot = new Vector2(0.5f, 0.5f);
-        boxRect.sizeDelta = new Vector2(420f, 280f);
+        boxRect.sizeDelta = new Vector2(440f, 340f);
         boxRect.anchoredPosition = Vector2.zero;
 
         var title = CreateText("Pause Title", box.transform, "Пауза", 38, TextAnchor.MiddleCenter, Color.white);
@@ -158,11 +168,11 @@ public class GameplayHudPauseController : MonoBehaviour
         title.rectTransform.anchorMin = new Vector2(0f, 1f);
         title.rectTransform.anchorMax = new Vector2(1f, 1f);
         title.rectTransform.pivot = new Vector2(0.5f, 1f);
-        title.rectTransform.sizeDelta = new Vector2(0f, 72f);
-        title.rectTransform.anchoredPosition = new Vector2(0f, -28f);
+        title.rectTransform.sizeDelta = new Vector2(0f, 62f);
+        title.rectTransform.anchoredPosition = new Vector2(0f, -30f);
 
-        CreateButton("Resume Button", box.transform, "Продолжить", new Vector2(0f, -62f), ResumeGame);
-        CreateButton("Exit To Menu Button", box.transform, "Выйти в меню", new Vector2(0f, -136f), ExitToMenu);
+        CreateButton("Resume Button", box.transform, "Продолжить", new Vector2(0f, -128f), ResumeGame);
+        CreateButton("Exit To Menu Button", box.transform, "Выйти в меню", new Vector2(0f, -204f), ExitToMenu);
     }
 
     private void SetPaused(bool value)
@@ -174,6 +184,11 @@ public class GameplayHudPauseController : MonoBehaviour
         if (pausePanel != null)
         {
             pausePanel.SetActive(isPaused);
+        }
+
+        if (healthPanel != null)
+        {
+            healthPanel.transform.SetAsLastSibling();
         }
 
         Cursor.visible = isPaused;

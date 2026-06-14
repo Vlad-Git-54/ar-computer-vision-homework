@@ -10,17 +10,28 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private string gameSceneName = "SampleScene";
 
     private Sprite whiteSprite;
+    private readonly Color menuBackgroundColor = new Color(0.72f, 0.82f, 0.92f, 1f);
+    private readonly Color menuPanelColor = new Color(0.94f, 0.97f, 1f, 0.96f);
+    private readonly Color menuTextColor = new Color(0.07f, 0.1f, 0.15f, 1f);
+    private readonly Color menuMutedTextColor = new Color(0.2f, 0.28f, 0.36f, 1f);
+    private readonly Color buttonColor = new Color(0.1f, 0.42f, 0.88f, 1f);
 
     private void Awake()
     {
         Time.timeScale = 1f;
         AudioListener.pause = false;
+        whiteSprite = CreateWhiteSprite();
+        PrepareCamera();
         CreateEventSystemIfNeeded();
 
-        if (FindObjectOfType<Canvas>() == null)
+        var canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
         {
             CreateMenu();
+            return;
         }
+
+        StyleExistingMenu();
     }
 
     public void StartGame()
@@ -37,8 +48,6 @@ public class MainMenuController : MonoBehaviour
 
     private void CreateMenu()
     {
-        whiteSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f));
-
         var canvasObject = new GameObject("Main Menu Canvas");
         var canvas = canvasObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -50,14 +59,14 @@ public class MainMenuController : MonoBehaviour
 
         canvasObject.AddComponent<GraphicRaycaster>();
 
-        var background = CreateImage("Menu Background", canvasObject.transform, new Color(0.06f, 0.08f, 0.12f, 1f));
+        var background = CreateImage("Menu Background", canvasObject.transform, menuBackgroundColor);
         var backgroundRect = background.rectTransform;
         backgroundRect.anchorMin = Vector2.zero;
         backgroundRect.anchorMax = Vector2.one;
         backgroundRect.offsetMin = Vector2.zero;
         backgroundRect.offsetMax = Vector2.zero;
 
-        var title = CreateText("Menu Title", background.transform, "Домашние задания AR", 48, TextAnchor.MiddleCenter, Color.white);
+        var title = CreateText("Menu Title", background.transform, "Домашние задания AR", 48, TextAnchor.MiddleCenter, menuTextColor);
         title.fontStyle = FontStyle.Bold;
         title.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         title.rectTransform.anchorMax = new Vector2(0.5f, 1f);
@@ -71,7 +80,7 @@ public class MainMenuController : MonoBehaviour
 
     private void CreateButton(string objectName, Transform parent, string label, Vector2 position, UnityEngine.Events.UnityAction action)
     {
-        var buttonImage = CreateImage(objectName, parent, new Color(0.17f, 0.5f, 0.94f, 1f));
+        var buttonImage = CreateImage(objectName, parent, buttonColor);
         var rect = buttonImage.rectTransform;
         rect.anchorMin = new Vector2(0.5f, 1f);
         rect.anchorMax = new Vector2(0.5f, 1f);
@@ -117,6 +126,71 @@ public class MainMenuController : MonoBehaviour
         label.raycastTarget = false;
 
         return label;
+    }
+
+    private void StyleExistingMenu()
+    {
+        SetImageColor("Menu Background", menuBackgroundColor);
+        SetImageColor("Menu Panel", menuPanelColor);
+        SetImageColor("Start Game Button", buttonColor);
+        SetImageColor("Quit Game Button", buttonColor);
+
+        SetTextColor("Menu Title", menuTextColor);
+        SetTextColor("Menu Subtitle", menuMutedTextColor);
+        SetTextColor("Start Game Button Text", Color.white);
+        SetTextColor("Quit Game Button Text", Color.white);
+    }
+
+    private void PrepareCamera()
+    {
+        var camera = Camera.main;
+        if (camera == null)
+        {
+            camera = FindObjectOfType<Camera>();
+        }
+
+        if (camera == null)
+        {
+            return;
+        }
+
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.backgroundColor = menuBackgroundColor;
+    }
+
+    private void SetImageColor(string objectName, Color color)
+    {
+        var target = GameObject.Find(objectName);
+        if (target == null)
+        {
+            return;
+        }
+
+        var image = target.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = color;
+        }
+    }
+
+    private void SetTextColor(string objectName, Color color)
+    {
+        var target = GameObject.Find(objectName);
+        if (target == null)
+        {
+            return;
+        }
+
+        var text = target.GetComponent<Text>();
+        if (text != null)
+        {
+            text.color = color;
+        }
+    }
+
+    private Sprite CreateWhiteSprite()
+    {
+        return Sprite.Create(Texture2D.whiteTexture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f));
     }
 
     private void CreateEventSystemIfNeeded()
