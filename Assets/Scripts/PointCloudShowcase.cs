@@ -2,7 +2,6 @@
 
 using UnityEngine;
 
-[ExecuteAlways]
 public class PointCloudShowcase : MonoBehaviour
 {
     [SerializeField] private int pointCount = 180;
@@ -13,11 +12,6 @@ public class PointCloudShowcase : MonoBehaviour
     private const string GeneratedPointPrefix = "Point Cloud Dot ";
     private Material pointMaterial;
 
-    private void OnEnable()
-    {
-        RebuildCloud();
-    }
-
     private void Start()
     {
         RebuildCloud();
@@ -25,11 +19,18 @@ public class PointCloudShowcase : MonoBehaviour
 
     private void OnDisable()
     {
-        ClearGeneratedPoints();
+        if (Application.isPlaying)
+        {
+            ClearGeneratedPoints();
+        }
 
         if (pointMaterial != null)
         {
-            DestroyGeneratedObject(pointMaterial);
+            if (Application.isPlaying)
+            {
+                Destroy(pointMaterial);
+            }
+
             pointMaterial = null;
         }
     }
@@ -38,11 +39,6 @@ public class PointCloudShowcase : MonoBehaviour
     {
         pointCount = Mathf.Clamp(pointCount, 20, 500);
         pointSize = Mathf.Clamp(pointSize, 0.02f, 0.35f);
-
-        if (isActiveAndEnabled)
-        {
-            RebuildCloud();
-        }
     }
 
     private void RebuildCloud()
@@ -129,12 +125,6 @@ public class PointCloudShowcase : MonoBehaviour
 
     private void DestroyGeneratedObject(Object target)
     {
-        if (Application.isPlaying)
-        {
-            Destroy(target);
-            return;
-        }
-
-        DestroyImmediate(target);
+        Destroy(target);
     }
 }

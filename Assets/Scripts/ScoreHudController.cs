@@ -10,10 +10,12 @@ public class ScoreHudController : MonoBehaviour
     private const string HighScoreKey = "HomeworkCoinHighScore";
 
     [SerializeField] private int startingScore = 0;
+    [SerializeField] private int targetScore = 20;
     [SerializeField] private string menuSceneName = "MainMenuScene";
 
     private Text scoreText;
     private Text bestScoreText;
+    private Text gameOverTitleText;
     private Text gameOverScoreText;
     private Text gameOverBestText;
     private GameObject gameOverPanel;
@@ -67,6 +69,11 @@ public class ScoreHudController : MonoBehaviour
         currentScore += amount;
         SaveBestScoreIfNeeded();
         UpdateScoreView();
+
+        if (currentScore >= targetScore)
+        {
+            ShowFinalPanel("Победа!");
+        }
     }
 
     public void ResetCurrentScore()
@@ -82,15 +89,7 @@ public class ScoreHudController : MonoBehaviour
             return;
         }
 
-        gameOver = true;
-        SaveBestScoreIfNeeded();
-        UpdateScoreView();
-        UpdateGameOverView();
-        SetGameOverPanel(true);
-
-        Time.timeScale = 0f;
-        Cursor.visible = true;
-        Cursor.lockState = CursorLockMode.None;
+        ShowFinalPanel("Игра окончена");
     }
 
     public void RestartGame()
@@ -179,13 +178,13 @@ public class ScoreHudController : MonoBehaviour
         boxRect.sizeDelta = new Vector2(520f, 360f);
         boxRect.anchoredPosition = Vector2.zero;
 
-        var title = CreateText("Game Over Title", box.transform, "Игра окончена", 38, TextAnchor.MiddleCenter, Color.white);
-        title.fontStyle = FontStyle.Bold;
-        title.rectTransform.anchorMin = new Vector2(0f, 1f);
-        title.rectTransform.anchorMax = new Vector2(1f, 1f);
-        title.rectTransform.pivot = new Vector2(0.5f, 1f);
-        title.rectTransform.sizeDelta = new Vector2(0f, 62f);
-        title.rectTransform.anchoredPosition = new Vector2(0f, -28f);
+        gameOverTitleText = CreateText("Game Over Title", box.transform, "Игра окончена", 38, TextAnchor.MiddleCenter, Color.white);
+        gameOverTitleText.fontStyle = FontStyle.Bold;
+        gameOverTitleText.rectTransform.anchorMin = new Vector2(0f, 1f);
+        gameOverTitleText.rectTransform.anchorMax = new Vector2(1f, 1f);
+        gameOverTitleText.rectTransform.pivot = new Vector2(0.5f, 1f);
+        gameOverTitleText.rectTransform.sizeDelta = new Vector2(0f, 62f);
+        gameOverTitleText.rectTransform.anchoredPosition = new Vector2(0f, -28f);
 
         gameOverScoreText = CreateText("Game Over Score", box.transform, "Счёт: 0", 26, TextAnchor.MiddleCenter, Color.white);
         gameOverScoreText.rectTransform.anchorMin = new Vector2(0f, 1f);
@@ -229,6 +228,30 @@ public class ScoreHudController : MonoBehaviour
         {
             gameOverBestText.text = "Рекорд: " + bestScore;
         }
+    }
+
+    private void ShowFinalPanel(string titleText)
+    {
+        if (gameOver)
+        {
+            return;
+        }
+
+        gameOver = true;
+        SaveBestScoreIfNeeded();
+        UpdateScoreView();
+
+        if (gameOverTitleText != null)
+        {
+            gameOverTitleText.text = titleText;
+        }
+
+        UpdateGameOverView();
+        SetGameOverPanel(true);
+
+        Time.timeScale = 0f;
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
     }
 
     private void SetGameOverPanel(bool active)

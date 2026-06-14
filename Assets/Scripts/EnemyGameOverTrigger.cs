@@ -11,13 +11,22 @@ public class EnemyGameOverTrigger : MonoBehaviour
 
     private float nextDamageTime;
 
-    private void Awake()
+    private void OnTriggerEnter(Collider other)
     {
-        var enemyCollider = GetComponent<Collider>();
-        enemyCollider.isTrigger = true;
+        TryDamagePlayer(other);
     }
 
-    private void OnTriggerEnter(Collider other)
+    private void OnCollisionEnter(Collision collision)
+    {
+        TryDamagePlayer(collision.collider);
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        TryDamagePlayer(collision.collider);
+    }
+
+    private void TryDamagePlayer(Collider other)
     {
         var capsulePlayer = other.GetComponentInParent<CapsulePlayerController>();
         var robotPlayer = other.GetComponentInParent<RobotCoinPlayerController>();
