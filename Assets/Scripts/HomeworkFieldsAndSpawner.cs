@@ -36,14 +36,28 @@ public class HomeworkFieldsAndSpawner : MonoBehaviour
     };
 
     [Header("References")]
-    [SerializeField] private HomeworkDataTarget targetComponent;
-    [SerializeField] private GameObject prefabToSpawn;
+    [SerializeField] private HomeworkDataTarget targetComponent = null;
+    [SerializeField] private GameObject prefabToSpawn = null;
 
     [Header("Spawn settings")]
     [SerializeField] private Vector3 spawnPosition = new Vector3(0f, 0f, 2f);
     [SerializeField] private Vector3 spawnRotation = new Vector3(0f, 180f, 0f);
 
     private bool prefabWasPlaced;
+
+    private void OnValidate()
+    {
+        _ = author;
+        _ = boolValue;
+        _ = intValue;
+        _ = floatValue;
+        _ = doubleValue;
+        _ = stringValue;
+        _ = colorValue;
+        _ = vector2Value;
+        _ = vector3Value;
+        _ = stringCollection;
+    }
 
     private IEnumerator Start()
     {

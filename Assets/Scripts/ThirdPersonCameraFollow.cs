@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class ThirdPersonCameraFollow : MonoBehaviour
 {
-    [SerializeField] private Transform target;
+    [SerializeField] private Transform target = null;
     [SerializeField] private Vector3 offset = new Vector3(0f, 2.5f, -5f);
     [SerializeField] private float followSpeed = 8f;
     [SerializeField] private float lookHeight = 1f;

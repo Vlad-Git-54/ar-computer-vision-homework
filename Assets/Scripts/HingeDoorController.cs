@@ -10,12 +10,12 @@ public class HingeDoorController : MonoBehaviour
     [SerializeField] private float openedAngle = 90f;
     [SerializeField] private float closedAngle = 0f;
 
-    private HingeJoint hingeJoint;
+    private HingeJoint doorHingeJoint;
     private bool shouldOpen;
 
     private void Awake()
     {
-        hingeJoint = GetComponent<HingeJoint>();
+        doorHingeJoint = GetComponent<HingeJoint>();
         ConfigureJoint();
     }
 
@@ -30,22 +30,22 @@ public class HingeDoorController : MonoBehaviour
     private void FixedUpdate()
     {
         var targetAngle = shouldOpen ? openedAngle : closedAngle;
-        var angleDelta = Mathf.DeltaAngle(hingeJoint.angle, targetAngle);
+        var angleDelta = Mathf.DeltaAngle(doorHingeJoint.angle, targetAngle);
 
-        var motor = hingeJoint.motor;
+        var motor = doorHingeJoint.motor;
         motor.force = motorForce;
         motor.targetVelocity = Mathf.Abs(angleDelta) < 2f ? 0f : Mathf.Sign(angleDelta) * motorSpeed;
-        hingeJoint.motor = motor;
+        doorHingeJoint.motor = motor;
     }
 
     private void ConfigureJoint()
     {
-        hingeJoint.useMotor = true;
-        hingeJoint.useLimits = true;
+        doorHingeJoint.useMotor = true;
+        doorHingeJoint.useLimits = true;
 
-        var limits = hingeJoint.limits;
+        var limits = doorHingeJoint.limits;
         limits.min = closedAngle;
         limits.max = openedAngle;
-        hingeJoint.limits = limits;
+        doorHingeJoint.limits = limits;
     }
 }

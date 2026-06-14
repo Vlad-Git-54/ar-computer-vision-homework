@@ -11,17 +11,17 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 480;
     [SerializeField] private int requestedFps = 30;
-    [SerializeField] private int darkThreshold = 72;
-    [SerializeField] private int brightThreshold = 145;
+    [SerializeField] private int brightThreshold = 178;
     [SerializeField] private int sampleStep = 4;
-    [SerializeField] private float minMarkerSize = 0.08f;
-    [SerializeField] private float maxMarkerSize = 0.9f;
-    [SerializeField] private float minMarkerDensity = 0.18f;
+    [SerializeField] private float minMarkerSize = 0.18f;
+    [SerializeField] private float maxMarkerSize = 0.95f;
+    [SerializeField] private float minMarkerDensity = 0.68f;
+    [SerializeField] private float maxDarkMarkerDensity = 0.12f;
     [SerializeField] private float markerDistanceFromCamera = 7.2f;
-    [SerializeField] private float gameScaleAtMarker = 0.18f;
+    [SerializeField] private float gameScaleAtMarker = 0.22f;
     [SerializeField] private float followSharpness = 8f;
     [SerializeField] private float markerLostDelay = 0.45f;
-    [SerializeField] private string markerAssetPath = "Assets/Textures/ARHomeworkQrMarker.png";
+    [SerializeField] private string markerHelpText = "Маркер: чистый белый лист А4";
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private Vector3 arCameraPosition = new Vector3(0f, 2.8f, -2.5f);
     [SerializeField] private Vector3 arCameraRotation = new Vector3(14f, 0f, 0f);
@@ -80,7 +80,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         CreateInterface();
         StartWebcam();
         SetGameVisible(false, true);
-        UpdateStatus(false, "Поднесите маркер к веб-камере");
+        UpdateStatus(false, "Поднесите белый лист А4 к веб-камере");
     }
 
     private void Update()
@@ -106,11 +106,11 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         if (markerIsVisible)
         {
-            UpdateStatus(true, "Маркер найден, игра размещена на нём");
+            UpdateStatus(true, "Лист А4 найден, игра размещена на нём");
             return;
         }
 
-        UpdateStatus(false, markerWasFound ? "Маркер потерян, покажите его камере снова" : "Поднесите маркер к веб-камере");
+        UpdateStatus(false, markerWasFound ? "Лист потерян, покажите его камере снова" : "Поднесите белый лист А4 к веб-камере");
     }
 
     private void OnDestroy()
@@ -298,7 +298,7 @@ public class WebcamMarkerGameController : MonoBehaviour
                     brightMarkerCells[cellIndex] = 1;
                 }
 
-                if (luminance <= darkThreshold)
+                if (luminance <= 72)
                 {
                     darkMarkerCells[cellIndex] = 1;
                 }
@@ -363,8 +363,8 @@ public class WebcamMarkerGameController : MonoBehaviour
             var componentWidth = component.MaxX - component.MinX + 1;
             var componentHeight = component.MaxY - component.MinY + 1;
             var aspect = componentWidth / (float)Mathf.Max(1, componentHeight);
-            var squareBonus = Mathf.Clamp01(1f - Mathf.Abs(1f - aspect));
-            var score = component.BrightCount * component.BrightDensity * (1f + component.DarkDensity + squareBonus);
+            var aspectBonus = GetA4AspectScore(aspect);
+            var score = component.BrightCount * component.BrightDensity * (1f + aspectBonus);
             if (score <= bestScore)
             {
                 continue;
@@ -415,7 +415,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var brightDensity = brightCount / (float)area;
         var darkDensity = CountDarkCells(minX, maxX, minY, maxY, gridWidth) / (float)area;
 
-        result.Found = brightCount >= 28 && brightDensity >= minMarkerDensity && darkDensity >= 0.05f;
+        result.Found = brightCount >= 160 && brightDensity >= minMarkerDensity && darkDensity <= maxDarkMarkerDensity;
         result.MinX = minX;
         result.MaxX = maxX;
         result.MinY = minY;
@@ -462,7 +462,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         var markerHeight = height * sampleStep;
         var markerSize = Mathf.Max(markerWidth / (float)imageWidth, markerHeight / (float)imageHeight);
 
-        if (markerSize < minMarkerSize || markerSize > maxMarkerSize || aspect < 0.55f || aspect > 1.8f)
+        if (markerSize < minMarkerSize || markerSize > maxMarkerSize || !IsA4AspectAccepted(aspect))
         {
             return observation;
         }
@@ -472,6 +472,22 @@ public class WebcamMarkerGameController : MonoBehaviour
         observation.Size = markerSize;
         observation.Density = component.BrightDensity + component.DarkDensity;
         return observation;
+    }
+
+    private bool IsA4AspectAccepted(float aspect)
+    {
+        const float landscapeA4 = 1.414f;
+        const float portraitA4 = 0.707f;
+        return Mathf.Abs(aspect - landscapeA4) <= 0.55f || Mathf.Abs(aspect - portraitA4) <= 0.3f;
+    }
+
+    private float GetA4AspectScore(float aspect)
+    {
+        const float landscapeA4 = 1.414f;
+        const float portraitA4 = 0.707f;
+        var landscapeScore = 1f - Mathf.Abs(aspect - landscapeA4) / 0.55f;
+        var portraitScore = 1f - Mathf.Abs(aspect - portraitA4) / 0.3f;
+        return Mathf.Clamp01(Mathf.Max(landscapeScore, portraitScore));
     }
 
     private void PlaceGameOnMarker(MarkerObservation marker)
@@ -563,10 +579,10 @@ public class WebcamMarkerGameController : MonoBehaviour
         canvasObject.AddComponent<GraphicRaycaster>();
 
         var panel = CreatePanel(canvasObject.transform);
-        statusText = CreateText("Marker Status", panel.transform, "Поднесите маркер к веб-камере", 24, FontStyle.Bold, Color.white);
+        statusText = CreateText("Marker Status", panel.transform, "Поднесите белый лист А4 к веб-камере", 24, FontStyle.Bold, Color.white);
         SetStretch(statusText.rectTransform, new Vector2(22f, 38f), new Vector2(22f, 12f));
 
-        helpText = CreateText("Marker Help", panel.transform, "Маркер для проверки: " + markerAssetPath, 18, FontStyle.Normal, new Color(0.82f, 0.9f, 1f, 1f));
+        helpText = CreateText("Marker Help", panel.transform, markerHelpText, 18, FontStyle.Normal, new Color(0.82f, 0.9f, 1f, 1f));
         SetStretch(helpText.rectTransform, new Vector2(22f, 12f), new Vector2(22f, 52f));
     }
 
@@ -622,7 +638,7 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         if (helpText != null)
         {
-            helpText.text = "Маркер для проверки: " + markerAssetPath;
+            helpText.text = markerHelpText;
         }
     }
 }
