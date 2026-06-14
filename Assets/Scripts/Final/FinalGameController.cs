@@ -29,11 +29,13 @@ public class FinalGameController : MonoBehaviour
     private const string PlayerColorKey = "FinalProjectPlayerColor";
     private const string HighScoreKey = "FinalProjectHighScore";
 
-    private readonly List<GameObject> navMeshObjects = new List<GameObject>();
+    private readonly List<NavMeshBoxSource> navMeshBoxes = new List<NavMeshBoxSource>();
     private readonly List<GameObject> coins = new List<GameObject>();
     private readonly List<GameObject> enemies = new List<GameObject>();
     private readonly Color floorColor = new Color(0.56f, 0.82f, 0.75f, 1f);
     private readonly Color wallColor = new Color(0.55f, 0.63f, 0.76f, 1f);
+    private readonly Vector3 cameraOffset = new Vector3(0f, 10.5f, -13.5f);
+    private const float CameraLookHeight = 1.25f;
 
     private NavMeshData navMeshData;
     private NavMeshDataInstance navMeshInstance;
@@ -61,6 +63,22 @@ public class FinalGameController : MonoBehaviour
     private int highScore;
     private bool paused;
     private bool gameEnded;
+
+    private struct NavMeshBoxSource
+    {
+        public Vector3 Position;
+        public Vector3 Size;
+        public int Area;
+        public NavMeshBuildSourceShape Shape;
+
+        public NavMeshBoxSource(Vector3 position, Vector3 size, int area, NavMeshBuildSourceShape shape)
+        {
+            Position = position;
+            Size = size;
+            Area = area;
+            Shape = shape;
+        }
+    }
 
     public bool IsGameEnded => gameEnded;
 
@@ -215,10 +233,19 @@ public class FinalGameController : MonoBehaviour
         var light = lightObject.AddComponent<Light>();
         light.type = LightType.Directional;
         light.color = new Color(1f, 0.96f, 0.9f, 1f);
-        light.intensity = 1.15f;
-        lightObject.transform.rotation = Quaternion.Euler(48f, -34f, 0f);
+        light.intensity = 1.25f;
+        light.shadows = LightShadows.Soft;
+        lightObject.transform.rotation = Quaternion.Euler(54f, -32f, 0f);
 
-        RenderSettings.ambientLight = new Color(0.42f, 0.47f, 0.52f, 1f);
+        var fillObject = new GameObject("Final Fill Light");
+        var fill = fillObject.AddComponent<Light>();
+        fill.type = LightType.Directional;
+        fill.color = new Color(0.68f, 0.78f, 1f, 1f);
+        fill.intensity = 0.45f;
+        fill.shadows = LightShadows.None;
+        fillObject.transform.rotation = Quaternion.Euler(35f, 145f, 0f);
+
+        RenderSettings.ambientLight = new Color(0.62f, 0.66f, 0.7f, 1f);
         RenderSettings.fog = false;
     }
 
@@ -255,44 +282,97 @@ public class FinalGameController : MonoBehaviour
 
         if (includeInNavMesh)
         {
-            navMeshObjects.Add(cube);
+            RegisterNavMeshBox(objectName, position, scale);
         }
 
         return cube;
     }
 
+    private void RegisterNavMeshBox(string objectName, Vector3 position, Vector3 size)
+    {
+        var notWalkableArea = NavMesh.GetAreaFromName("Not Walkable");
+        if (notWalkableArea < 0)
+        {
+            notWalkableArea = 1;
+        }
+
+        var isFloor = objectName.Contains("Floor");
+        var area = isFloor ? 0 : notWalkableArea;
+        var shape = isFloor ? NavMeshBuildSourceShape.Box : NavMeshBuildSourceShape.ModifierBox;
+        navMeshBoxes.Add(new NavMeshBoxSource(position, size, area, shape));
+    }
+
     private void BuildRuntimeNavMesh()
     {
         var sources = new List<NavMeshBuildSource>();
-        var markups = new List<NavMeshBuildMarkup>();
-        foreach (var navObject in navMeshObjects)
+        foreach (var box in navMeshBoxes)
         {
-            NavMeshBuilder.CollectSources(navObject.transform, ~0, NavMeshCollectGeometry.PhysicsColliders, 0, markups, sources);
+            sources.Add(new NavMeshBuildSource
+            {
+                shape = box.Shape,
+                transform = Matrix4x4.TRS(box.Position, Quaternion.identity, Vector3.one),
+                size = box.Size,
+                area = box.Area
+            });
         }
 
         var settings = NavMesh.GetSettingsByID(0);
+        settings.agentRadius = 0.35f;
+        settings.agentHeight = 1.8f;
+        settings.agentClimb = 0.35f;
+        settings.minRegionArea = 0.08f;
+
         var bounds = new Bounds(Vector3.zero, new Vector3(arenaSize.x + 6f, 8f, arenaSize.y + 6f));
         navMeshData = NavMeshBuilder.BuildNavMeshData(settings, sources, bounds, Vector3.zero, Quaternion.identity);
         if (navMeshData != null)
         {
             navMeshInstance = NavMesh.AddNavMeshData(navMeshData);
         }
+        else
+        {
+            Debug.LogError("Не удалось построить NavMesh для финальной арены");
+        }
     }
 
     private void CreateCamera()
     {
-        var cameraObject = new GameObject("Main Camera");
+        gameCamera = Camera.main;
+        if (gameCamera == null)
+        {
+            gameCamera = FindObjectOfType<Camera>();
+        }
+
+        GameObject cameraObject;
+        if (gameCamera == null)
+        {
+            cameraObject = new GameObject("Main Camera");
+            gameCamera = cameraObject.AddComponent<Camera>();
+        }
+        else
+        {
+            cameraObject = gameCamera.gameObject;
+        }
+
         cameraObject.tag = "MainCamera";
-        gameCamera = cameraObject.AddComponent<Camera>();
         gameCamera.fieldOfView = 54f;
         gameCamera.nearClipPlane = 0.05f;
         gameCamera.farClipPlane = 200f;
-        cameraObject.AddComponent<AudioListener>();
+        gameCamera.clearFlags = CameraClearFlags.Skybox;
 
-        var follow = cameraObject.AddComponent<ThirdPersonCameraFollow>();
-        SetPrivateField(follow, "offset", new Vector3(0f, 7.2f, -10.5f));
+        if (cameraObject.GetComponent<AudioListener>() == null)
+        {
+            cameraObject.AddComponent<AudioListener>();
+        }
+
+        var follow = cameraObject.GetComponent<ThirdPersonCameraFollow>();
+        if (follow == null)
+        {
+            follow = cameraObject.AddComponent<ThirdPersonCameraFollow>();
+        }
+
+        SetPrivateField(follow, "offset", cameraOffset);
         SetPrivateField(follow, "followSpeed", 9f);
-        SetPrivateField(follow, "lookHeight", 1.15f);
+        SetPrivateField(follow, "lookHeight", CameraLookHeight);
     }
 
     private void SpawnPlayer()
@@ -314,6 +394,7 @@ public class FinalGameController : MonoBehaviour
 
         var follow = gameCamera.GetComponent<ThirdPersonCameraFollow>();
         SetPrivateField(follow, "target", playerTransform);
+        PlaceCameraAtPlayer();
     }
 
     private void SpawnEnemies()
@@ -327,20 +408,45 @@ public class FinalGameController : MonoBehaviour
 
         for (var i = 0; i < Mathf.Min(enemyCount, spawnPoints.Length); i++)
         {
-            NavMeshHit hit;
-            var spawn = spawnPoints[i];
-            if (NavMesh.SamplePosition(spawn, out hit, 5f, NavMesh.AllAreas))
+            Vector3 spawn;
+            if (!TryGetNavMeshPoint(spawnPoints[i], 8f, out spawn))
             {
-                spawn = hit.position;
+                Debug.LogWarning("Пропущен враг, потому что рядом с точкой появления нет NavMesh: " + spawnPoints[i]);
+                continue;
             }
 
             var enemy = CreateRobotActor("Enemy Robot " + (i + 1), spawn, new Color(0.95f, 0.18f, 0.12f, 1f), enemyAnimatorController);
-            enemy.AddComponent<NavMeshAgent>();
+            var agent = enemy.AddComponent<NavMeshAgent>();
+            agent.Warp(spawn);
             enemy.AddComponent<CapsuleCollider>();
             var controller = enemy.AddComponent<FinalEnemyController>();
             controller.Configure(this, playerTransform, enemy.GetComponentInChildren<Animator>(), enemyMoveSpeed);
             enemies.Add(enemy);
         }
+    }
+
+    private bool TryGetNavMeshPoint(Vector3 point, float distance, out Vector3 result)
+    {
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(point, out hit, distance, NavMesh.AllAreas))
+        {
+            result = hit.position;
+            return true;
+        }
+
+        result = point;
+        return false;
+    }
+
+    private void PlaceCameraAtPlayer()
+    {
+        if (gameCamera == null || playerTransform == null)
+        {
+            return;
+        }
+
+        gameCamera.transform.position = playerTransform.position + cameraOffset;
+        gameCamera.transform.LookAt(playerTransform.position + Vector3.up * CameraLookHeight);
     }
 
     private GameObject CreateRobotActor(string objectName, Vector3 position, Color color, RuntimeAnimatorController controller)

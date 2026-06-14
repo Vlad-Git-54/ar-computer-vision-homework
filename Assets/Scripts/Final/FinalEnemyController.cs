@@ -37,6 +37,8 @@ public class FinalEnemyController : MonoBehaviour
         {
             animator.applyRootMotion = false;
         }
+
+        PlaceAgentOnNavMesh();
     }
 
     private void Awake()
@@ -63,10 +65,26 @@ public class FinalEnemyController : MonoBehaviour
             return;
         }
 
+        if (!agent.enabled || !agent.isOnNavMesh)
+        {
+            if (!PlaceAgentOnNavMesh())
+            {
+                SetAnimation(0f);
+                return;
+            }
+        }
+
         if (Time.time >= nextDestinationTime)
         {
             nextDestinationTime = Time.time + destinationUpdateInterval;
-            agent.SetDestination(target.position);
+            Vector3 destination;
+            if (!TryGetDestination(out destination))
+            {
+                SetAnimation(0f);
+                return;
+            }
+
+            agent.SetDestination(destination);
         }
 
         RecoverIfStuck();
@@ -76,6 +94,39 @@ public class FinalEnemyController : MonoBehaviour
         {
             gameController.LoseGame("Противник догнал игрока");
         }
+    }
+
+    private bool TryGetDestination(out Vector3 destination)
+    {
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(target.position, out hit, 3f, NavMesh.AllAreas))
+        {
+            destination = hit.position;
+            return true;
+        }
+
+        destination = target.position;
+        return false;
+    }
+
+    private bool PlaceAgentOnNavMesh()
+    {
+        NavMeshHit hit;
+        if (!NavMesh.SamplePosition(transform.position, out hit, 8f, NavMesh.AllAreas))
+        {
+            return false;
+        }
+
+        if (agent.enabled)
+        {
+            agent.Warp(hit.position);
+        }
+        else
+        {
+            transform.position = hit.position;
+        }
+
+        return agent.isOnNavMesh;
     }
 
     private void OnTriggerEnter(Collider other)
@@ -93,7 +144,7 @@ public class FinalEnemyController : MonoBehaviour
 
     private void RecoverIfStuck()
     {
-        if (!agent.hasPath)
+        if (!agent.isOnNavMesh || !agent.hasPath)
         {
             stuckTimer = 0f;
             previousPosition = transform.position;
