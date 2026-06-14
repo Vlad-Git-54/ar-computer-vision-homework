@@ -2834,9 +2834,11 @@ MonoBehaviour:
   sampleStep: 6
   minCheckerContrast: 42
   minCheckerEdgeDensity: 0.045
-  minCheckerPatternScore: 0.48
+  minCheckerPatternScore: 0.62
   minCheckerAxisAlternation: 0.68
   minCheckerParityMatch: 0.72
+  minCheckerRowTransitions: 5
+  minCheckerColumnTransitions: 4
   maxCheckerDarkLuminance: 125
   minCheckerLightLuminance: 145
   minCheckerSize: 0.06
@@ -2850,8 +2852,8 @@ MonoBehaviour:
   minCenterFill: 0.44
   minCornerFill: 0.28
   maxSheetLuminanceDeviation: 60
-  stableFramesToShow: 2
-  markerLostDelay: 2
+  stableFramesToShow: 3
+  markerLostDelay: 0.35
   keepGameVisibleAfterTrigger: 0
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0448\u0430\u0445\u043C\u0430\u0442\u043D\u0430\u044F \u0434\u043E\u0441\u043A\u0430 \u043B\u044E\u0431\u043E\u0433\u043E \u0440\u0430\u0437\u043C\u0435\u0440\u0430"
   useFixedTabletMarkerPlacement: 0

@@ -64,6 +64,7 @@ public class PointCloudShowcase : MonoBehaviour
             var puff = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             puff.name = GeneratedPuffPrefix + (i + 1).ToString("000");
             puff.hideFlags = HideFlags.DontSave;
+            puff.layer = gameObject.layer;
             puff.transform.SetParent(transform, false);
             puff.transform.localPosition = GetPuffCenter(i);
             puff.transform.localScale = GetPuffScale(i);
@@ -88,6 +89,7 @@ public class PointCloudShowcase : MonoBehaviour
             var point = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             point.name = GeneratedPointPrefix + (i + 1).ToString("000");
             point.hideFlags = HideFlags.DontSave;
+            point.layer = gameObject.layer;
             point.transform.SetParent(transform, false);
             point.transform.localPosition = CreatePointPosition(i);
             point.transform.localScale = Vector3.one * CreatePointSize(i);

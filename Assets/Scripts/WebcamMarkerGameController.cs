@@ -15,9 +15,11 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private int sampleStep = 6;
     [SerializeField] private int minCheckerContrast = 42;
     [SerializeField] private float minCheckerEdgeDensity = 0.045f;
-    [SerializeField] private float minCheckerPatternScore = 0.48f;
+    [SerializeField] private float minCheckerPatternScore = 0.62f;
     [SerializeField] private float minCheckerAxisAlternation = 0.68f;
     [SerializeField] private float minCheckerParityMatch = 0.72f;
+    [SerializeField] private int minCheckerRowTransitions = 5;
+    [SerializeField] private int minCheckerColumnTransitions = 4;
     [SerializeField] private int maxCheckerDarkLuminance = 125;
     [SerializeField] private int minCheckerLightLuminance = 145;
     [SerializeField] private float minCheckerSize = 0.06f;
@@ -31,8 +33,8 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private float minCenterFill = 0.44f;
     [SerializeField] private float minCornerFill = 0.28f;
     [SerializeField] private float maxSheetLuminanceDeviation = 60f;
-    [SerializeField] private int stableFramesToShow = 4;
-    [SerializeField] private float markerLostDelay = 2f;
+    [SerializeField] private int stableFramesToShow = 3;
+    [SerializeField] private float markerLostDelay = 0.35f;
     [SerializeField] private bool keepGameVisibleAfterTrigger = false;
     [SerializeField] private string markerHelpText = "Маркер: шахматная доска любого размера";
     [SerializeField] private bool useFixedTabletMarkerPlacement = false;
@@ -617,7 +619,7 @@ public class WebcamMarkerGameController : MonoBehaviour
             new Vector2(1f, 1f),
             new Vector2(0f, 1f)
         };
-        markerOverlayMesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+        markerOverlayMesh.triangles = new[] { 0, 1, 2, 0, 2, 3, 2, 1, 0, 3, 2, 0 };
         markerOverlayMesh.RecalculateBounds();
     }
 
@@ -953,15 +955,21 @@ public class WebcamMarkerGameController : MonoBehaviour
     private float CalculateCheckerPatternScore(int minX, int maxX, int minY, int maxY)
     {
         var bestScore = CalculateCheckerTextureScore(minX, maxX, minY, maxY);
+        if (bestScore <= 0f)
+        {
+            return 0f;
+        }
+
+        var bestExactScore = 0f;
         for (var columns = 4; columns <= 14; columns++)
         {
             for (var rows = 4; rows <= 10; rows++)
             {
-                bestScore = Mathf.Max(bestScore, CalculateExactCheckerPatternScore(minX, maxX, minY, maxY, columns, rows));
+                bestExactScore = Mathf.Max(bestExactScore, CalculateExactCheckerPatternScore(minX, maxX, minY, maxY, columns, rows));
             }
         }
 
-        return bestScore;
+        return Mathf.Max(bestScore, bestScore * 0.65f + bestExactScore * 0.35f);
     }
 
     private float CalculateCheckerTextureScore(int minX, int maxX, int minY, int maxY)
@@ -1026,7 +1034,40 @@ public class WebcamMarkerGameController : MonoBehaviour
 
         var darkBalance = darkCells / (float)Mathf.Max(1, totalCells);
         var lightBalance = lightCells / (float)Mathf.Max(1, totalCells);
-        if (darkBalance < 0.25f || darkBalance > 0.75f || lightBalance < 0.25f || lightBalance > 0.75f)
+        if (darkBalance < 0.28f || darkBalance > 0.72f || lightBalance < 0.28f || lightBalance > 0.72f)
+        {
+            return 0f;
+        }
+
+        const int scanlineCount = 7;
+        var passingRows = 0;
+        var passingColumns = 0;
+        var rowTransitionSum = 0;
+        var columnTransitionSum = 0;
+
+        for (var index = 0; index < scanlineCount; index++)
+        {
+            var amount = (index + 1f) / (scanlineCount + 1f);
+            var rowY = Mathf.RoundToInt(Mathf.Lerp(minY, maxY, amount));
+            var columnX = Mathf.RoundToInt(Mathf.Lerp(minX, maxX, amount));
+            var rowTransitions = CountCheckerLineTransitions(minX, maxX, rowY, true, threshold);
+            var columnTransitions = CountCheckerLineTransitions(minY, maxY, columnX, false, threshold);
+
+            rowTransitionSum += rowTransitions;
+            columnTransitionSum += columnTransitions;
+
+            if (rowTransitions >= minCheckerRowTransitions)
+            {
+                passingRows++;
+            }
+
+            if (columnTransitions >= minCheckerColumnTransitions)
+            {
+                passingColumns++;
+            }
+        }
+
+        if (passingRows < 3 || passingColumns < 3)
         {
             return 0f;
         }
@@ -1080,23 +1121,66 @@ public class WebcamMarkerGameController : MonoBehaviour
             }
         }
 
-        if (verticalLineCount < 4 || horizontalLineCount < 4)
+        if (verticalLineCount < 5 || horizontalLineCount < 5)
         {
             return 0f;
         }
 
         var verticalTransitionRatio = verticalTransitions / (float)Mathf.Max(1, verticalPairs);
         var horizontalTransitionRatio = horizontalTransitions / (float)Mathf.Max(1, horizontalPairs);
-        if (verticalTransitionRatio < 0.045f || horizontalTransitionRatio < 0.045f)
+        if (verticalTransitionRatio < 0.07f || horizontalTransitionRatio < 0.07f)
         {
             return 0f;
         }
 
         var transitionScore = Mathf.Clamp01((verticalTransitionRatio + horizontalTransitionRatio) / 0.18f);
         var lineScore = Mathf.Min(Mathf.Clamp01(verticalLineCount / 6f), Mathf.Clamp01(horizontalLineCount / 5f));
+        var scanlineScore = (Mathf.Clamp01(rowTransitionSum / (float)(scanlineCount * Mathf.Max(1, minCheckerRowTransitions + 2)))
+            + Mathf.Clamp01(columnTransitionSum / (float)(scanlineCount * Mathf.Max(1, minCheckerColumnTransitions + 2)))) * 0.5f;
         var balanceScore = 1f - Mathf.Clamp01(Mathf.Abs(darkBalance - 0.5f) / 0.25f);
         var contrastScore = Mathf.Clamp01((maxLum - minLum) / 170f);
-        return transitionScore * 0.35f + lineScore * 0.35f + balanceScore * 0.15f + contrastScore * 0.15f;
+        return transitionScore * 0.25f + lineScore * 0.22f + scanlineScore * 0.33f + balanceScore * 0.1f + contrastScore * 0.1f;
+    }
+
+    private int CountCheckerLineTransitions(int minPrimary, int maxPrimary, int fixedAxis, bool horizontal, int threshold)
+    {
+        var transitions = 0;
+        var previousState = 0;
+
+        for (var primary = minPrimary; primary <= maxPrimary; primary++)
+        {
+            var luminance = horizontal ? ReadGridLuminance(primary, fixedAxis) : ReadGridLuminance(fixedAxis, primary);
+            var state = ClassifyCheckerCell(luminance, threshold);
+            if (state == 0)
+            {
+                continue;
+            }
+
+            if (previousState != 0 && previousState != state)
+            {
+                transitions++;
+            }
+
+            previousState = state;
+        }
+
+        return transitions;
+    }
+
+    private int ClassifyCheckerCell(int luminance, int threshold)
+    {
+        const int hysteresis = 10;
+        if (luminance <= threshold - hysteresis)
+        {
+            return -1;
+        }
+
+        if (luminance >= threshold + hysteresis)
+        {
+            return 1;
+        }
+
+        return 0;
     }
 
     private bool CrossesCheckerThreshold(int first, int second, int threshold)
@@ -1635,6 +1719,15 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         gameVisible = visible;
+
+        if (visible)
+        {
+            AssignLayerRecursively(gameRoot.gameObject, gameRenderLayer);
+            if (sceneCamera != null)
+            {
+                sceneCamera.cullingMask &= ~(1 << gameRenderLayer);
+            }
+        }
 
         if (markerGameCamera != null)
         {
