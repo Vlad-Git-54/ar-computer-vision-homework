@@ -8,6 +8,10 @@ public class RobotCoinPlayerController : MonoBehaviour
 {
     [SerializeField] private float moveSpeed = 4.5f;
     [SerializeField] private float rotateSpeed = 130f;
+    [SerializeField] private Animator animator;
+    [SerializeField] private string speedParameter = "MoveSpeed";
+    [SerializeField] private string movingParameter = "IsMoving";
+    [SerializeField] private float movingThreshold = 0.08f;
     [SerializeField] private Color[] colors =
     {
         Color.white,
@@ -19,6 +23,8 @@ public class RobotCoinPlayerController : MonoBehaviour
     private Rigidbody robotRigidbody;
     private Renderer[] renderers;
     private int colorIndex;
+    private float moveInput;
+    private float rotateInput;
 
     private void Awake()
     {
@@ -26,6 +32,16 @@ public class RobotCoinPlayerController : MonoBehaviour
         robotRigidbody.useGravity = true;
         robotRigidbody.freezeRotation = true;
         robotRigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
+
+        if (animator != null)
+        {
+            animator.applyRootMotion = false;
+        }
 
         renderers = GetComponentsInChildren<Renderer>(true);
         ApplyColor(colors[colorIndex]);
@@ -38,12 +54,24 @@ public class RobotCoinPlayerController : MonoBehaviour
             colorIndex = (colorIndex + 1) % colors.Length;
             ApplyColor(colors[colorIndex]);
         }
+
+        ReadMovementInput();
+        UpdateAnimation();
     }
 
     private void FixedUpdate()
     {
-        var moveInput = 0f;
-        var rotateInput = 0f;
+        var rotation = Quaternion.Euler(0f, rotateInput * rotateSpeed * Time.fixedDeltaTime, 0f);
+        robotRigidbody.MoveRotation(robotRigidbody.rotation * rotation);
+
+        var movement = transform.forward * moveInput * moveSpeed * Time.fixedDeltaTime;
+        robotRigidbody.MovePosition(robotRigidbody.position + movement);
+    }
+
+    private void ReadMovementInput()
+    {
+        moveInput = 0f;
+        rotateInput = 0f;
 
         if (Input.GetKey(KeyCode.W))
         {
@@ -64,12 +92,18 @@ public class RobotCoinPlayerController : MonoBehaviour
         {
             rotateInput += 1f;
         }
+    }
 
-        var rotation = Quaternion.Euler(0f, rotateInput * rotateSpeed * Time.fixedDeltaTime, 0f);
-        robotRigidbody.MoveRotation(robotRigidbody.rotation * rotation);
+    private void UpdateAnimation()
+    {
+        if (animator == null)
+        {
+            return;
+        }
 
-        var movement = transform.forward * moveInput * moveSpeed * Time.fixedDeltaTime;
-        robotRigidbody.MovePosition(robotRigidbody.position + movement);
+        var movementSpeed = Mathf.Abs(moveInput) * moveSpeed;
+        animator.SetFloat(speedParameter, movementSpeed);
+        animator.SetBool(movingParameter, movementSpeed > movingThreshold);
     }
 
     private void ApplyColor(Color color)
