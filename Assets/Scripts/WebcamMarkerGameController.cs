@@ -34,8 +34,12 @@ public class WebcamMarkerGameController : MonoBehaviour
     [SerializeField] private string markerHelpText = "Маркер: чистый белый лист А4";
     [SerializeField] private bool setupSceneAutomatically = true;
     [SerializeField] private bool placeGameOnCameraFacingPaper = true;
-    [SerializeField] private bool freezePhysicsInMarkerMode = true;
+    [SerializeField] private bool freezePhysicsInMarkerMode = false;
+    [SerializeField] private bool useGravityInMarkerMode = false;
     [SerializeField] private bool fitGameplayToPaperAspect = true;
+    [SerializeField] private bool lockAnchorAfterPlacement = true;
+    [SerializeField] private int stableMarkerFramesBeforePlacement = 4;
+    [SerializeField] private float markerSmoothingSharpness = 4f;
     [SerializeField] private Vector3 arCameraPosition = new Vector3(0f, 2.8f, -2.5f);
     [SerializeField] private Vector3 arCameraRotation = new Vector3(14f, 0f, 0f);
 
@@ -54,6 +58,9 @@ public class WebcamMarkerGameController : MonoBehaviour
     private bool gameVisible;
     private bool markerWasFound;
     private MarkerObservation lastStableMarker;
+    private bool stableMarkerInitialized;
+    private bool markerAnchorLocked;
+    private int stableMarkerFrameCount;
     private float lastMarkerFoundTime = -10f;
     private float lastDetectionErrorLogTime = -10f;
     private string lastDetectionHint = "";
@@ -117,24 +124,33 @@ public class WebcamMarkerGameController : MonoBehaviour
         UpdateBackgroundScale();
 
         var marker = DetectMarkerSafely();
+        var markerWasVisibleBeforeUpdate = Time.unscaledTime - lastMarkerFoundTime <= markerLostDelay;
         if (marker.Found)
         {
             lastMarkerFoundTime = Time.unscaledTime;
             markerWasFound = true;
-            lastStableMarker = marker;
+            AcceptMarkerObservation(marker, markerWasVisibleBeforeUpdate);
         }
 
         var markerIsVisible = Time.unscaledTime - lastMarkerFoundTime <= markerLostDelay;
-        if (markerIsVisible && lastStableMarker.Found)
+        var markerReady = markerIsVisible && lastStableMarker.Found && stableMarkerFrameCount >= stableMarkerFramesBeforePlacement;
+        if (markerReady && (!markerAnchorLocked || !lockAnchorAfterPlacement))
         {
-            PlaceGameOnMarker(lastStableMarker);
+            PlaceGameOnMarker(lastStableMarker, !markerAnchorLocked);
+            markerAnchorLocked = true;
+        }
+        else if (!markerIsVisible)
+        {
+            stableMarkerInitialized = false;
+            markerAnchorLocked = false;
+            stableMarkerFrameCount = 0;
         }
 
-        SetGameVisible(markerIsVisible, !markerIsVisible && Time.frameCount % 15 == 0);
+        SetGameVisible(markerReady, !markerReady && Time.frameCount % 15 == 0);
 
-        if (markerIsVisible)
+        if (markerReady)
         {
-            UpdateStatus(true, "Лист А4 найден, игра размещена на нём");
+            UpdateStatus(true, "Лист А4 найден, игра закреплена на нём");
             return;
         }
 
@@ -145,6 +161,32 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         UpdateStatus(false, waitingMessage);
+    }
+
+    private void AcceptMarkerObservation(MarkerObservation marker, bool hadRecentMarker)
+    {
+        if (!stableMarkerInitialized || !hadRecentMarker)
+        {
+            lastStableMarker = marker;
+            stableMarkerInitialized = true;
+            markerAnchorLocked = false;
+            stableMarkerFrameCount = 1;
+            return;
+        }
+
+        if (markerAnchorLocked && lockAnchorAfterPlacement)
+        {
+            return;
+        }
+
+        var blend = 1f - Mathf.Exp(-markerSmoothingSharpness * Time.unscaledDeltaTime);
+        lastStableMarker.Found = true;
+        lastStableMarker.Center = Vector2.Lerp(lastStableMarker.Center, marker.Center, blend);
+        lastStableMarker.Size = Mathf.Lerp(lastStableMarker.Size, marker.Size, blend);
+        lastStableMarker.Density = Mathf.Lerp(lastStableMarker.Density, marker.Density, blend);
+        lastStableMarker.ViewportWidth = Mathf.Lerp(lastStableMarker.ViewportWidth, marker.ViewportWidth, blend);
+        lastStableMarker.ViewportHeight = Mathf.Lerp(lastStableMarker.ViewportHeight, marker.ViewportHeight, blend);
+        stableMarkerFrameCount = Mathf.Min(stableMarkerFrameCount + 1, stableMarkerFramesBeforePlacement);
     }
 
     private MarkerObservation DetectMarkerSafely()
@@ -788,7 +830,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         return Mathf.Clamp01(Mathf.Max(landscapeScore, portraitScore));
     }
 
-    private void PlaceGameOnMarker(MarkerObservation marker)
+    private void PlaceGameOnMarker(MarkerObservation marker, bool instant)
     {
         var targetPosition = sceneCamera.ViewportToWorldPoint(new Vector3(marker.Center.x, marker.Center.y, markerDistanceFromCamera));
         var targetRotation = Quaternion.Euler(0f, sceneCamera.transform.eulerAngles.y, 0f);
@@ -799,7 +841,7 @@ public class WebcamMarkerGameController : MonoBehaviour
         }
 
         var targetScale = CalculateGameScale(marker);
-        var blend = 1f - Mathf.Exp(-followSharpness * Time.unscaledDeltaTime);
+        var blend = instant ? 1f : 1f - Mathf.Exp(-followSharpness * Time.unscaledDeltaTime);
 
         gameRoot.position = Vector3.Lerp(gameRoot.position, targetPosition, blend);
         gameRoot.rotation = Quaternion.Slerp(gameRoot.rotation, targetRotation, blend);
@@ -861,7 +903,7 @@ public class WebcamMarkerGameController : MonoBehaviour
             if (visible)
             {
                 currentRigidbody.isKinematic = freezePhysicsInMarkerMode;
-                currentRigidbody.useGravity = !freezePhysicsInMarkerMode;
+                currentRigidbody.useGravity = useGravityInMarkerMode;
                 currentRigidbody.collisionDetectionMode = freezePhysicsInMarkerMode ? CollisionDetectionMode.Discrete : CollisionDetectionMode.Continuous;
             }
             else

@@ -2850,7 +2850,11 @@ MonoBehaviour:
   markerHelpText: "\u041C\u0430\u0440\u043A\u0435\u0440: \u0447\u0438\u0441\u0442\u044B\u0439 \u0431\u0435\u043B\u044B\u0439 \u043B\u0438\u0441\u0442 \u04104"
   setupSceneAutomatically: 1
   placeGameOnCameraFacingPaper: 1
-  freezePhysicsInMarkerMode: 1
+  freezePhysicsInMarkerMode: 0
+  useGravityInMarkerMode: 0
   fitGameplayToPaperAspect: 1
+  lockAnchorAfterPlacement: 1
+  stableMarkerFramesBeforePlacement: 4
+  markerSmoothingSharpness: 4
   arCameraPosition: {x: 0, y: 2.8, z: -2.5}
   arCameraRotation: {x: 14, y: 0, z: 0}

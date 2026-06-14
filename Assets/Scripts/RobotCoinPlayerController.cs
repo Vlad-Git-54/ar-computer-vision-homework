@@ -8,6 +8,7 @@ public class RobotCoinPlayerController : MonoBehaviour
 {
     [SerializeField] private float moveSpeed = 4.5f;
     [SerializeField] private float rotateSpeed = 130f;
+    [SerializeField] private bool scaleMovementWithParent = true;
     [SerializeField] private Animator animator;
     [SerializeField] private string speedParameter = "MoveSpeed";
     [SerializeField] private string movingParameter = "IsMoving";
@@ -64,7 +65,7 @@ public class RobotCoinPlayerController : MonoBehaviour
         var rotation = Quaternion.Euler(0f, rotateInput * rotateSpeed * Time.fixedDeltaTime, 0f);
         robotRigidbody.MoveRotation(robotRigidbody.rotation * rotation);
 
-        var movement = transform.forward * moveInput * moveSpeed * Time.fixedDeltaTime;
+        var movement = transform.forward * moveInput * GetScaledMoveSpeed() * Time.fixedDeltaTime;
         robotRigidbody.MovePosition(robotRigidbody.position + movement);
     }
 
@@ -104,6 +105,18 @@ public class RobotCoinPlayerController : MonoBehaviour
         var movementSpeed = Mathf.Abs(moveInput) * moveSpeed;
         animator.SetFloat(speedParameter, movementSpeed);
         animator.SetBool(movingParameter, movementSpeed > movingThreshold);
+    }
+
+    private float GetScaledMoveSpeed()
+    {
+        if (!scaleMovementWithParent || transform.parent == null)
+        {
+            return moveSpeed;
+        }
+
+        var parentScale = transform.parent.lossyScale;
+        var horizontalScale = (Mathf.Abs(parentScale.x) + Mathf.Abs(parentScale.z)) * 0.5f;
+        return moveSpeed * Mathf.Max(0.01f, horizontalScale);
     }
 
     private void ApplyColor(Color color)
