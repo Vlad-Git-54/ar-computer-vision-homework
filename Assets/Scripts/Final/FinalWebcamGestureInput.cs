@@ -1,5 +1,6 @@
 // Автор: Марьяновский Владислав Андреевич
 
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -18,10 +19,13 @@ public class FinalWebcamGestureInput : MonoBehaviour
     [SerializeField] private RawImage previewImage;
     [SerializeField] private Text statusText;
     [SerializeField] private bool mirrorPreview = true;
+    [SerializeField] private bool requestWebcamPermission = false;
     [SerializeField] private float sampleInterval = 0.05f;
     [SerializeField] private int requestedWidth = 640;
     [SerializeField] private int requestedHeight = 360;
     [SerializeField] private int requestedFps = 30;
+
+    [Header("Contour")]
     [SerializeField] private bool useSkinColor = true;
     [SerializeField] private bool useMotionFallback = true;
     [SerializeField] private int motionThreshold = 28;
@@ -31,14 +35,30 @@ public class FinalWebcamGestureInput : MonoBehaviour
     [SerializeField] private float zoneLatchSeconds = 1.1f;
     [SerializeField] private float cameraRestartDelay = 2.5f;
 
+    [Header("Template calibration")]
+    [SerializeField] private int templateWidth = 24;
+    [SerializeField] private int templateHeight = 16;
+    [SerializeField] private float templateConfidenceThreshold = 0.28f;
+    [SerializeField] private float templateConfidenceGap = 0.03f;
+    [SerializeField] private KeyCode captureLeftKey = KeyCode.F1;
+    [SerializeField] private KeyCode captureCenterKey = KeyCode.F2;
+    [SerializeField] private KeyCode captureRightKey = KeyCode.F3;
+    [SerializeField] private KeyCode clearTemplatesKey = KeyCode.F4;
+
+    private const string TemplateKeyPrefix = "FinalProjectHandTemplate_";
+
     private WebCamTexture webcamTexture;
-    private Texture2D binaryPreviewTexture;
+    private Texture2D previewTexture;
     private Color32[] currentPixels;
     private Color32[] previousPixels;
-    private Color32[] binaryPixels;
-    private bool[] movingBlocks;
+    private Color32[] previewPixels;
+    private bool[] foregroundBlocks;
     private bool[] largestBlobBlocks;
     private bool[] visitedBlocks;
+    private byte[] lastReducedMask;
+    private byte[] leftTemplate;
+    private byte[] centerTemplate;
+    private byte[] rightTemplate;
     private int cachedWidth;
     private int cachedHeight;
     private int gridWidth;
@@ -49,6 +69,8 @@ public class FinalWebcamGestureInput : MonoBehaviour
     private float centerScore;
     private float rightScore;
     private float lastDetectionTime;
+    private float statusOverrideUntil;
+    private string statusOverride;
     private FinalGestureZone activeZone;
     private FinalGestureZone heldZone;
     private FinalGestureZone lastDetectedZone;
@@ -74,18 +96,19 @@ public class FinalWebcamGestureInput : MonoBehaviour
         UpdateStatusText();
     }
 
-    private IEnumerator Start()
+    private void Awake()
     {
-        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
-        {
-            yield return Application.RequestUserAuthorization(UserAuthorization.WebCam);
-        }
+        LoadTemplates();
+    }
 
-        StartWebcam(false);
+    private void Start()
+    {
+        StartCoroutine(StartWebcamRoutine(false));
     }
 
     private void Update()
     {
+        HandleTemplateKeys();
         RestartSlowCameraIfNeeded();
         SampleWebcamIfNeeded();
         UpdateHeldZone();
@@ -127,13 +150,29 @@ public class FinalWebcamGestureInput : MonoBehaviour
         return true;
     }
 
+    private IEnumerator StartWebcamRoutine(bool useDefaultConstructor)
+    {
+#if !UNITY_EDITOR
+        if (requestWebcamPermission && !Application.HasUserAuthorization(UserAuthorization.WebCam))
+        {
+            yield return Application.RequestUserAuthorization(UserAuthorization.WebCam);
+        }
+#else
+        yield return null;
+#endif
+
+        StartWebcam(useDefaultConstructor);
+    }
+
     private void StartWebcam(bool useDefaultConstructor)
     {
-        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
+#if !UNITY_EDITOR
+        if (requestWebcamPermission && !Application.HasUserAuthorization(UserAuthorization.WebCam))
         {
-            UpdateStatusText();
+            SetStatusOverride("Нет доступа к вебкамере. Разрешите камеру для Unity.", 3f);
             return;
         }
+#endif
 
         if (webcamTexture != null && webcamTexture.isPlaying)
         {
@@ -183,7 +222,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
             return;
         }
 
-        previewImage.texture = binaryPreviewTexture != null ? (Texture)binaryPreviewTexture : webcamTexture;
+        previewImage.texture = previewTexture != null ? (Texture)previewTexture : webcamTexture;
         previewImage.uvRect = mirrorPreview ? new Rect(1f, 0f, -1f, 1f) : new Rect(0f, 0f, 1f, 1f);
     }
 
@@ -193,11 +232,12 @@ public class FinalWebcamGestureInput : MonoBehaviour
         cachedHeight = 0;
         currentPixels = null;
         previousPixels = null;
-        binaryPixels = null;
-        binaryPreviewTexture = null;
-        movingBlocks = null;
+        previewPixels = null;
+        previewTexture = null;
+        foregroundBlocks = null;
         largestBlobBlocks = null;
         visitedBlocks = null;
+        lastReducedMask = null;
         leftScore = 0f;
         centerScore = 0f;
         rightScore = 0f;
@@ -205,6 +245,29 @@ public class FinalWebcamGestureInput : MonoBehaviour
         heldZone = FinalGestureZone.None;
         lastDetectedZone = FinalGestureZone.None;
         heldTime = 0f;
+    }
+
+    private void HandleTemplateKeys()
+    {
+        if (Input.GetKeyDown(captureLeftKey))
+        {
+            CaptureTemplate(FinalGestureZone.Left);
+        }
+
+        if (Input.GetKeyDown(captureCenterKey))
+        {
+            CaptureTemplate(FinalGestureZone.Center);
+        }
+
+        if (Input.GetKeyDown(captureRightKey))
+        {
+            CaptureTemplate(FinalGestureZone.Right);
+        }
+
+        if (Input.GetKeyDown(clearTemplatesKey))
+        {
+            ClearTemplates();
+        }
     }
 
     private void SampleWebcamIfNeeded()
@@ -240,11 +303,11 @@ public class FinalWebcamGestureInput : MonoBehaviour
         if (previousPixels == null)
         {
             previousPixels = new Color32[currentPixels.Length];
-            System.Array.Copy(currentPixels, previousPixels, currentPixels.Length);
+            Array.Copy(currentPixels, previousPixels, currentPixels.Length);
         }
 
         var detectedZone = DetectHandContour();
-        System.Array.Copy(currentPixels, previousPixels, currentPixels.Length);
+        Array.Copy(currentPixels, previousPixels, currentPixels.Length);
 
         if (detectedZone != FinalGestureZone.None)
         {
@@ -276,52 +339,40 @@ public class FinalWebcamGestureInput : MonoBehaviour
         gridHeight = Mathf.CeilToInt((float)cachedHeight / blockSize);
         currentPixels = new Color32[cachedWidth * cachedHeight];
         previousPixels = null;
-        binaryPixels = new Color32[cachedWidth * cachedHeight];
-        movingBlocks = new bool[gridWidth * gridHeight];
+        previewPixels = new Color32[cachedWidth * cachedHeight];
+        foregroundBlocks = new bool[gridWidth * gridHeight];
         largestBlobBlocks = new bool[gridWidth * gridHeight];
         visitedBlocks = new bool[gridWidth * gridHeight];
-        binaryPreviewTexture = new Texture2D(cachedWidth, cachedHeight, TextureFormat.RGBA32, false);
-        binaryPreviewTexture.wrapMode = TextureWrapMode.Clamp;
-        binaryPreviewTexture.filterMode = FilterMode.Point;
+        previewTexture = new Texture2D(cachedWidth, cachedHeight, TextureFormat.RGBA32, false);
+        previewTexture.wrapMode = TextureWrapMode.Clamp;
+        previewTexture.filterMode = FilterMode.Point;
         ApplyPreviewTexture();
         ClearPreview();
     }
 
     private FinalGestureZone DetectHandContour()
     {
-        System.Array.Clear(movingBlocks, 0, movingBlocks.Length);
-        System.Array.Clear(largestBlobBlocks, 0, largestBlobBlocks.Length);
-        System.Array.Clear(visitedBlocks, 0, visitedBlocks.Length);
+        Array.Clear(foregroundBlocks, 0, foregroundBlocks.Length);
+        Array.Clear(largestBlobBlocks, 0, largestBlobBlocks.Length);
+        Array.Clear(visitedBlocks, 0, visitedBlocks.Length);
 
         BuildForegroundBlocks();
         var blob = FindLargestBlob();
-        DrawMotionPreview(blob);
+        MarkLargestBlob(blob);
+        DrawPreview(blob);
 
         leftScore = 0f;
         centerScore = 0f;
         rightScore = 0f;
+        lastReducedMask = null;
 
         if (blob.Count < minBlobBlocks)
         {
             return FinalGestureZone.None;
         }
 
-        var normalizedX = blob.CenterX / Mathf.Max(1f, gridWidth - 1f);
-        var confidence = Mathf.Clamp01((float)blob.Count / 42f);
-        if (normalizedX < 0.34f)
-        {
-            leftScore = confidence;
-            return FinalGestureZone.Left;
-        }
-
-        if (normalizedX > 0.66f)
-        {
-            rightScore = confidence;
-            return FinalGestureZone.Right;
-        }
-
-        centerScore = confidence;
-        return FinalGestureZone.Center;
+        lastReducedMask = BuildReducedMask(largestBlobBlocks);
+        return ChooseZone(blob, lastReducedMask);
     }
 
     private void BuildForegroundBlocks()
@@ -349,7 +400,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
                     }
                 }
 
-                movingBlocks[BlockIndex(bx, by)] = changed >= minChangedPixelsPerBlock;
+                foregroundBlocks[BlockIndex(bx, by)] = changed >= minChangedPixelsPerBlock;
             }
         }
     }
@@ -364,7 +415,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
             for (var bx = 0; bx < gridWidth; bx++)
             {
                 var index = BlockIndex(bx, by);
-                if (visitedBlocks[index] || !movingBlocks[index])
+                if (visitedBlocks[index] || !foregroundBlocks[index])
                 {
                     continue;
                 }
@@ -374,14 +425,6 @@ public class FinalWebcamGestureInput : MonoBehaviour
                 {
                     largest = current;
                 }
-            }
-        }
-
-        if (largest.Count > 0)
-        {
-            foreach (var blockIndex in largest.BlockIndices)
-            {
-                largestBlobBlocks[blockIndex] = true;
             }
         }
 
@@ -420,7 +463,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
                     }
 
                     var nextIndex = BlockIndex(nx, ny);
-                    if (visitedBlocks[nextIndex] || !movingBlocks[nextIndex])
+                    if (visitedBlocks[nextIndex] || !foregroundBlocks[nextIndex])
                     {
                         continue;
                     }
@@ -432,6 +475,105 @@ public class FinalWebcamGestureInput : MonoBehaviour
         }
 
         return blob;
+    }
+
+    private void MarkLargestBlob(MotionBlob blob)
+    {
+        if (blob.Count <= 0)
+        {
+            return;
+        }
+
+        foreach (var blockIndex in blob.BlockIndices)
+        {
+            largestBlobBlocks[blockIndex] = true;
+        }
+    }
+
+    private FinalGestureZone ChooseZone(MotionBlob blob, byte[] currentMask)
+    {
+        var fallbackZone = GetZoneByBlobPosition(blob);
+        var fallbackConfidence = Mathf.Clamp01((float)blob.Count / 42f);
+        SetZoneScore(fallbackZone, fallbackConfidence * 0.45f);
+
+        if (!HasAnyTemplate() || currentMask == null)
+        {
+            return fallbackZone;
+        }
+
+        var bestZone = FinalGestureZone.None;
+        var bestScore = -1f;
+        var secondScore = -1f;
+
+        CheckTemplate(currentMask, leftTemplate, FinalGestureZone.Left, ref bestZone, ref bestScore, ref secondScore);
+        CheckTemplate(currentMask, centerTemplate, FinalGestureZone.Center, ref bestZone, ref bestScore, ref secondScore);
+        CheckTemplate(currentMask, rightTemplate, FinalGestureZone.Right, ref bestZone, ref bestScore, ref secondScore);
+
+        if (bestZone != FinalGestureZone.None)
+        {
+            SetZoneScore(bestZone, bestScore);
+        }
+
+        if (bestZone != FinalGestureZone.None && bestScore >= templateConfidenceThreshold && bestScore - secondScore >= templateConfidenceGap)
+        {
+            return bestZone;
+        }
+
+        return FinalGestureZone.None;
+    }
+
+    private void CheckTemplate(byte[] currentMask, byte[] template, FinalGestureZone zone, ref FinalGestureZone bestZone, ref float bestScore, ref float secondScore)
+    {
+        if (template == null)
+        {
+            return;
+        }
+
+        var score = CompareMasks(currentMask, template);
+        SetZoneScore(zone, score);
+
+        if (score > bestScore)
+        {
+            secondScore = bestScore;
+            bestScore = score;
+            bestZone = zone;
+        }
+        else if (score > secondScore)
+        {
+            secondScore = score;
+        }
+    }
+
+    private FinalGestureZone GetZoneByBlobPosition(MotionBlob blob)
+    {
+        var normalizedX = blob.CenterX / Mathf.Max(1f, gridWidth - 1f);
+        if (normalizedX < 0.34f)
+        {
+            return FinalGestureZone.Left;
+        }
+
+        if (normalizedX > 0.66f)
+        {
+            return FinalGestureZone.Right;
+        }
+
+        return FinalGestureZone.Center;
+    }
+
+    private void SetZoneScore(FinalGestureZone zone, float score)
+    {
+        if (zone == FinalGestureZone.Left)
+        {
+            leftScore = Mathf.Max(leftScore, score);
+        }
+        else if (zone == FinalGestureZone.Center)
+        {
+            centerScore = Mathf.Max(centerScore, score);
+        }
+        else if (zone == FinalGestureZone.Right)
+        {
+            rightScore = Mathf.Max(rightScore, score);
+        }
     }
 
     private bool IsForegroundPixel(int index)
@@ -471,11 +613,203 @@ public class FinalWebcamGestureInput : MonoBehaviour
         return color.r > color.b + 8 && color.r >= color.g - 8 && color.g > color.b - 4;
     }
 
-    private void DrawMotionPreview(MotionBlob blob)
+    private byte[] BuildReducedMask(bool[] sourceBlocks)
     {
-        for (var i = 0; i < binaryPixels.Length; i++)
+        if (sourceBlocks == null || templateWidth <= 0 || templateHeight <= 0)
         {
-            binaryPixels[i] = new Color32(0, 0, 0, 255);
+            return null;
+        }
+
+        var mask = new byte[templateWidth * templateHeight];
+        for (var ty = 0; ty < templateHeight; ty++)
+        {
+            var startY = Mathf.FloorToInt((float)ty / templateHeight * gridHeight);
+            var endY = Mathf.Max(startY + 1, Mathf.FloorToInt((float)(ty + 1) / templateHeight * gridHeight));
+
+            for (var tx = 0; tx < templateWidth; tx++)
+            {
+                var startX = Mathf.FloorToInt((float)tx / templateWidth * gridWidth);
+                var endX = Mathf.Max(startX + 1, Mathf.FloorToInt((float)(tx + 1) / templateWidth * gridWidth));
+                var total = 0;
+                var filled = 0;
+
+                for (var y = startY; y < endY && y < gridHeight; y++)
+                {
+                    for (var x = startX; x < endX && x < gridWidth; x++)
+                    {
+                        total++;
+                        if (sourceBlocks[BlockIndex(x, y)])
+                        {
+                            filled++;
+                        }
+                    }
+                }
+
+                mask[ty * templateWidth + tx] = total > 0 && filled * 2 >= total ? (byte)1 : (byte)0;
+            }
+        }
+
+        return mask;
+    }
+
+    private float CompareMasks(byte[] currentMask, byte[] template)
+    {
+        if (currentMask == null || template == null || currentMask.Length != template.Length)
+        {
+            return 0f;
+        }
+
+        var intersection = 0;
+        var union = 0;
+
+        for (var i = 0; i < currentMask.Length; i++)
+        {
+            var current = currentMask[i] > 0;
+            var saved = template[i] > 0;
+            if (current && saved)
+            {
+                intersection++;
+            }
+
+            if (current || saved)
+            {
+                union++;
+            }
+        }
+
+        return union == 0 ? 0f : (float)intersection / union;
+    }
+
+    private void CaptureTemplate(FinalGestureZone zone)
+    {
+        if (lastReducedMask == null)
+        {
+            SetStatusOverride("Образец не сохранен: поднимите руку так, чтобы появился белый контур.", 3f);
+            return;
+        }
+
+        var copy = new byte[lastReducedMask.Length];
+        Array.Copy(lastReducedMask, copy, lastReducedMask.Length);
+
+        if (zone == FinalGestureZone.Left)
+        {
+            leftTemplate = copy;
+        }
+        else if (zone == FinalGestureZone.Center)
+        {
+            centerTemplate = copy;
+        }
+        else if (zone == FinalGestureZone.Right)
+        {
+            rightTemplate = copy;
+        }
+
+        SaveTemplate(zone, copy);
+        SetStatusOverride("Образец сохранен: " + GetZoneLabel(zone) + ".", 3f);
+    }
+
+    private void ClearTemplates()
+    {
+        leftTemplate = null;
+        centerTemplate = null;
+        rightTemplate = null;
+        PlayerPrefs.DeleteKey(TemplateKeyPrefix + FinalGestureZone.Left);
+        PlayerPrefs.DeleteKey(TemplateKeyPrefix + FinalGestureZone.Center);
+        PlayerPrefs.DeleteKey(TemplateKeyPrefix + FinalGestureZone.Right);
+        PlayerPrefs.Save();
+        SetStatusOverride("Образцы рук сброшены. Сохраните новые через F1, F2, F3.", 3f);
+    }
+
+    private void LoadTemplates()
+    {
+        leftTemplate = LoadTemplate(FinalGestureZone.Left);
+        centerTemplate = LoadTemplate(FinalGestureZone.Center);
+        rightTemplate = LoadTemplate(FinalGestureZone.Right);
+    }
+
+    private void SaveTemplate(FinalGestureZone zone, byte[] template)
+    {
+        PlayerPrefs.SetString(TemplateKeyPrefix + zone, Convert.ToBase64String(template));
+        PlayerPrefs.Save();
+    }
+
+    private byte[] LoadTemplate(FinalGestureZone zone)
+    {
+        var encoded = PlayerPrefs.GetString(TemplateKeyPrefix + zone, "");
+        if (string.IsNullOrEmpty(encoded))
+        {
+            return null;
+        }
+
+        try
+        {
+            var template = Convert.FromBase64String(encoded);
+            return template.Length == templateWidth * templateHeight ? template : null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    private bool HasAnyTemplate()
+    {
+        return leftTemplate != null || centerTemplate != null || rightTemplate != null;
+    }
+
+    private int TemplateCount()
+    {
+        var count = 0;
+        if (leftTemplate != null)
+        {
+            count++;
+        }
+
+        if (centerTemplate != null)
+        {
+            count++;
+        }
+
+        if (rightTemplate != null)
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    private string GetZoneLabel(FinalGestureZone zone)
+    {
+        if (zone == FinalGestureZone.Left)
+        {
+            return "левая рука";
+        }
+
+        if (zone == FinalGestureZone.Center)
+        {
+            return "рука по центру";
+        }
+
+        if (zone == FinalGestureZone.Right)
+        {
+            return "правая рука";
+        }
+
+        return "нет зоны";
+    }
+
+    private void SetStatusOverride(string message, float seconds)
+    {
+        statusOverride = message;
+        statusOverrideUntil = Time.unscaledTime + seconds;
+    }
+
+    private void DrawPreview(MotionBlob blob)
+    {
+        for (var i = 0; i < previewPixels.Length; i++)
+        {
+            var gray = (byte)(GetGray(currentPixels[i]) * 0.35f);
+            previewPixels[i] = new Color32(gray, gray, gray, 255);
         }
 
         for (var by = 0; by < gridHeight; by++)
@@ -483,14 +817,14 @@ public class FinalWebcamGestureInput : MonoBehaviour
             for (var bx = 0; bx < gridWidth; bx++)
             {
                 var blockIndex = BlockIndex(bx, by);
-                if (!movingBlocks[blockIndex])
+                if (!foregroundBlocks[blockIndex])
                 {
                     continue;
                 }
 
                 var color = largestBlobBlocks[blockIndex]
                     ? new Color32(255, 255, 255, 255)
-                    : new Color32(70, 70, 70, 255);
+                    : new Color32(85, 85, 85, 255);
 
                 FillPreviewBlock(bx, by, color);
             }
@@ -501,8 +835,13 @@ public class FinalWebcamGestureInput : MonoBehaviour
             DrawBlobFrame(blob);
         }
 
-        binaryPreviewTexture.SetPixels32(binaryPixels);
-        binaryPreviewTexture.Apply(false);
+        previewTexture.SetPixels32(previewPixels);
+        previewTexture.Apply(false);
+    }
+
+    private byte GetGray(Color32 color)
+    {
+        return (byte)((color.r * 30 + color.g * 59 + color.b * 11) / 100);
     }
 
     private void FillPreviewBlock(int bx, int by, Color32 color)
@@ -516,7 +855,7 @@ public class FinalWebcamGestureInput : MonoBehaviour
         {
             for (var x = startX; x < endX; x++)
             {
-                binaryPixels[y * cachedWidth + x] = color;
+                previewPixels[y * cachedWidth + x] = color;
             }
         }
     }
@@ -527,35 +866,35 @@ public class FinalWebcamGestureInput : MonoBehaviour
         var maxX = Mathf.Clamp((blob.MaxX + 1) * blockSize - 1, 0, cachedWidth - 1);
         var minY = Mathf.Clamp(blob.MinY * blockSize, 0, cachedHeight - 1);
         var maxY = Mathf.Clamp((blob.MaxY + 1) * blockSize - 1, 0, cachedHeight - 1);
-        var frameColor = new Color32(255, 255, 255, 255);
+        var frameColor = new Color32(120, 255, 150, 255);
 
         for (var x = minX; x <= maxX; x++)
         {
-            binaryPixels[minY * cachedWidth + x] = frameColor;
-            binaryPixels[maxY * cachedWidth + x] = frameColor;
+            previewPixels[minY * cachedWidth + x] = frameColor;
+            previewPixels[maxY * cachedWidth + x] = frameColor;
         }
 
         for (var y = minY; y <= maxY; y++)
         {
-            binaryPixels[y * cachedWidth + minX] = frameColor;
-            binaryPixels[y * cachedWidth + maxX] = frameColor;
+            previewPixels[y * cachedWidth + minX] = frameColor;
+            previewPixels[y * cachedWidth + maxX] = frameColor;
         }
     }
 
     private void ClearPreview()
     {
-        if (binaryPreviewTexture == null || binaryPixels == null)
+        if (previewTexture == null || previewPixels == null)
         {
             return;
         }
 
-        for (var i = 0; i < binaryPixels.Length; i++)
+        for (var i = 0; i < previewPixels.Length; i++)
         {
-            binaryPixels[i] = new Color32(0, 0, 0, 255);
+            previewPixels[i] = new Color32(0, 0, 0, 255);
         }
 
-        binaryPreviewTexture.SetPixels32(binaryPixels);
-        binaryPreviewTexture.Apply(false);
+        previewTexture.SetPixels32(previewPixels);
+        previewTexture.Apply(false);
     }
 
     private int BlockIndex(int x, int y)
@@ -588,35 +927,32 @@ public class FinalWebcamGestureInput : MonoBehaviour
             return;
         }
 
-        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
+        if (!string.IsNullOrEmpty(statusOverride) && Time.unscaledTime < statusOverrideUntil)
         {
-            statusText.text = "Нет доступа к вебкамере. Разрешите камеру для Unity.";
+            statusText.text = statusOverride;
             return;
         }
 
-        if (WebCamTexture.devices.Length == 0 && webcamTexture == null)
+        if (webcamTexture == null)
         {
-            statusText.text = "Вебкамера не найдена. Можно использовать клавиатуру.";
+            statusText.text = "Вебкамера запускается. Если кадра нет, проверьте доступ к камере.";
             return;
         }
 
-        if (webcamTexture == null || !webcamTexture.isPlaying)
+        if (!webcamTexture.isPlaying)
         {
-            statusText.text = "Вебкамера запускается или перезапускается...";
+            statusText.text = "Вебкамера перезапускается...";
             return;
         }
 
         if (!IsReady)
         {
-            statusText.text = "Вебкамера запускается, ждём кадр...";
+            statusText.text = "Вебкамера запускается, ждем первый кадр...";
             return;
         }
 
-        var zone = activeZone == FinalGestureZone.Left ? "левая зона" :
-            activeZone == FinalGestureZone.Center ? "центр" :
-            activeZone == FinalGestureZone.Right ? "правая зона" : "движение руки не найдено";
-
-        statusText.text = "AR контур руки: " + zone + ". Держите руку в нужной зоне.";
+        var zone = activeZone == FinalGestureZone.None ? "рука не распознана" : GetZoneLabel(activeZone);
+        statusText.text = "AR образцы: " + zone + ". F1 левая, F2 центр, F3 правая, F4 сброс. Сохранено: " + TemplateCount() + "/3.";
     }
 
     private struct MotionBlob

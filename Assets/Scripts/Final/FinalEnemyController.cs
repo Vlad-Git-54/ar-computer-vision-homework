@@ -92,7 +92,7 @@ public class FinalEnemyController : MonoBehaviour
 
         if (Vector3.Distance(transform.position, target.position) <= touchDistance)
         {
-            gameController.LoseGame("Противник догнал игрока");
+            gameController.ApplyEnemyTouchDamage();
         }
     }
 
@@ -138,7 +138,7 @@ public class FinalEnemyController : MonoBehaviour
 
         if (other.transform == target || other.GetComponentInParent<FinalPlayerController>() != null)
         {
-            gameController.LoseGame("Противник догнал игрока");
+            gameController.ApplyEnemyTouchDamage();
         }
     }
 

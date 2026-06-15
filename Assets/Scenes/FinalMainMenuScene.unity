@@ -185,6 +185,7 @@ MonoBehaviour:
   previewImage: {fileID: 0}
   statusText: {fileID: 0}
   mirrorPreview: 1
+  requestWebcamPermission: 0
   sampleInterval: 0.05
   requestedWidth: 640
   requestedHeight: 360
@@ -197,6 +198,14 @@ MonoBehaviour:
   minBlobBlocks: 4
   zoneLatchSeconds: 1.1
   cameraRestartDelay: 2.5
+  templateWidth: 24
+  templateHeight: 16
+  templateConfidenceThreshold: 0.28
+  templateConfidenceGap: 0.03
+  captureLeftKey: 282
+  captureCenterKey: 283
+  captureRightKey: 284
+  clearTemplatesKey: 285
 --- !u!114 &100004
 MonoBehaviour:
   m_ObjectHideFlags: 0

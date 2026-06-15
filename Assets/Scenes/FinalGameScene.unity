@@ -181,6 +181,9 @@ MonoBehaviour:
   enemyMoveSpeed: 3.95
   arenaSize: {x: 42, y: 24}
   gestureHoldTime: 0.8
+  maxHealth: 100
+  enemyTouchDamage: 10
+  damageCooldown: 0.85
   cameraOffset: {x: 0, y: 4.3, z: -7.4}
   cameraFollowSpeed: 7
   cameraLookHeight: 1.2
@@ -200,6 +203,7 @@ MonoBehaviour:
   previewImage: {fileID: 0}
   statusText: {fileID: 0}
   mirrorPreview: 1
+  requestWebcamPermission: 0
   sampleInterval: 0.05
   requestedWidth: 640
   requestedHeight: 360
@@ -212,6 +216,14 @@ MonoBehaviour:
   minBlobBlocks: 4
   zoneLatchSeconds: 1.1
   cameraRestartDelay: 2.5
+  templateWidth: 24
+  templateHeight: 16
+  templateConfidenceThreshold: 0.28
+  templateConfidenceGap: 0.03
+  captureLeftKey: 282
+  captureCenterKey: 283
+  captureRightKey: 284
+  clearTemplatesKey: 285
 --- !u!114 &200004
 MonoBehaviour:
   m_ObjectHideFlags: 0

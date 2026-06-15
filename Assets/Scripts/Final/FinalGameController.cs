@@ -25,6 +25,9 @@ public class FinalGameController : MonoBehaviour
     [SerializeField] private float enemyMoveSpeed = 3.95f;
     [SerializeField] private Vector2 arenaSize = new Vector2(42f, 24f);
     [SerializeField] private float gestureHoldTime = 0.8f;
+    [SerializeField] private int maxHealth = 100;
+    [SerializeField] private int enemyTouchDamage = 10;
+    [SerializeField] private float damageCooldown = 0.85f;
 
     [Header("Camera")]
     [SerializeField] private Vector3 cameraOffset = new Vector3(0f, 4.3f, -7.4f);
@@ -51,6 +54,8 @@ public class FinalGameController : MonoBehaviour
     private Canvas hudCanvas;
     private Text scoreText;
     private Text bestScoreText;
+    private Text healthText;
+    private Image healthFill;
     private Text centerMessageText;
     private GameObject pausePanel;
     private GameObject finalPanel;
@@ -64,6 +69,8 @@ public class FinalGameController : MonoBehaviour
     private Sprite whiteSprite;
     private int score;
     private int highScore;
+    private int currentHealth;
+    private float nextDamageTime;
     private bool paused;
     private bool gameEnded;
 
@@ -90,6 +97,7 @@ public class FinalGameController : MonoBehaviour
         Time.timeScale = 1f;
         AudioListener.pause = false;
         highScore = PlayerPrefs.GetInt(HighScoreKey, 0);
+        currentHealth = Mathf.Max(1, maxHealth);
         whiteSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0f, 0f, 1f, 1f), Vector2.one * 0.5f);
 
         CreateEventSystemIfNeeded();
@@ -104,6 +112,7 @@ public class FinalGameController : MonoBehaviour
         CreateAudio();
         CreateHud();
         UpdateScoreView();
+        UpdateHealthView();
         ShowCenterMessage("Соберите все монеты и не дайте врагам догнать себя", 2.8f);
     }
 
@@ -169,6 +178,38 @@ public class FinalGameController : MonoBehaviour
         }
 
         FinishGame("Поражение", reason);
+    }
+
+    public void ApplyEnemyTouchDamage()
+    {
+        DamagePlayer(enemyTouchDamage, "\u0417\u0434\u043e\u0440\u043e\u0432\u044c\u0435 \u0438\u0433\u0440\u043e\u043a\u0430 \u0437\u0430\u043a\u043e\u043d\u0447\u0438\u043b\u043e\u0441\u044c");
+    }
+
+    public void DamagePlayer(int amount, string defeatReason)
+    {
+        if (gameEnded || paused || amount <= 0 || Time.time < nextDamageTime)
+        {
+            return;
+        }
+
+        nextDamageTime = Time.time + damageCooldown;
+        currentHealth = Mathf.Max(0, currentHealth - amount);
+        UpdateHealthView();
+        var returnedCoins = ReturnCollectedCoinsToArena();
+
+        if (currentHealth <= 0)
+        {
+            FinishGame("\u041f\u043e\u0440\u0430\u0436\u0435\u043d\u0438\u0435", defeatReason);
+            return;
+        }
+
+        var message = "\u0412\u0440\u0430\u0433 \u0437\u0430\u0434\u0435\u043b \u0438\u0433\u0440\u043e\u043a\u0430: -" + amount + "\u0020\u0437\u0434\u043e\u0440\u043e\u0432\u044c\u044f";
+        if (returnedCoins > 0)
+        {
+            message += "\n\u041c\u043e\u043d\u0435\u0442\u043a\u0438 \u0432\u0435\u0440\u043d\u0443\u043b\u0438\u0441\u044c \u043d\u0430 \u043f\u043e\u043b\u0435: " + returnedCoins;
+        }
+
+        ShowCenterMessage(message, 1.55f);
     }
 
     public void RestartGame()
@@ -576,6 +617,100 @@ public class FinalGameController : MonoBehaviour
         return positions;
     }
 
+    private int ReturnCollectedCoinsToArena()
+    {
+        var occupied = new List<Vector3>();
+        foreach (var coin in coins)
+        {
+            if (coin != null && coin.activeSelf)
+            {
+                occupied.Add(coin.transform.position);
+            }
+        }
+
+        var returned = 0;
+        foreach (var coin in coins)
+        {
+            if (coin == null || coin.activeSelf)
+            {
+                continue;
+            }
+
+            var position = FindReturnCoinPosition(occupied, returned);
+            coin.transform.position = position;
+            coin.transform.rotation = Quaternion.identity;
+
+            var pickup = coin.GetComponent<FinalCoinPickup>();
+            if (pickup != null)
+            {
+                pickup.ResetPickup();
+            }
+            else
+            {
+                coin.SetActive(true);
+            }
+
+            occupied.Add(position);
+            returned++;
+        }
+
+        if (returned > 0)
+        {
+            score = Mathf.Max(0, score - returned);
+            UpdateScoreView();
+        }
+
+        return returned;
+    }
+
+    private Vector3 FindReturnCoinPosition(List<Vector3> occupied, int index)
+    {
+        var usableWidth = arenaSize.x - 7f;
+        var usableDepth = arenaSize.y - 5f;
+
+        for (var attempt = 0; attempt < 90; attempt++)
+        {
+            var point = new Vector3(
+                Random.Range(-usableWidth * 0.46f, usableWidth * 0.46f),
+                0.55f,
+                Random.Range(-usableDepth * 0.46f, usableDepth * 0.46f));
+
+            if (IsSafeReturnedCoinPoint(point, occupied))
+            {
+                return point;
+            }
+        }
+
+        var angle = (index * 137.5f + Time.frameCount) * Mathf.Deg2Rad;
+        return new Vector3(
+            Mathf.Clamp(Mathf.Cos(angle) * usableWidth * 0.32f, -usableWidth * 0.46f, usableWidth * 0.46f),
+            0.55f,
+            Mathf.Clamp(Mathf.Sin(angle) * usableDepth * 0.32f, -usableDepth * 0.46f, usableDepth * 0.46f));
+    }
+
+    private bool IsSafeReturnedCoinPoint(Vector3 point, List<Vector3> occupied)
+    {
+        if (!IsPointClear(point) || !IsFarFromOtherCoins(point, occupied))
+        {
+            return false;
+        }
+
+        if (playerTransform != null && Vector3.Distance(point, playerTransform.position) < 2.4f)
+        {
+            return false;
+        }
+
+        foreach (var enemy in enemies)
+        {
+            if (enemy != null && Vector3.Distance(point, enemy.transform.position) < 2.2f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private bool IsPointClear(Vector3 point)
     {
         var hits = Physics.OverlapSphere(point, 0.9f, ~0, QueryTriggerInteraction.Ignore);
@@ -771,6 +906,7 @@ public class FinalGameController : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         hudCanvas.gameObject.AddComponent<GraphicRaycaster>();
 
+        CreateHealthHud(hudCanvas.transform);
         CreateScoreHud(hudCanvas.transform);
         CreatePausePanel(hudCanvas.transform);
         CreateFinalPanel(hudCanvas.transform);
@@ -782,6 +918,29 @@ public class FinalGameController : MonoBehaviour
 
         pausePanel.SetActive(false);
         finalPanel.SetActive(false);
+    }
+
+    private void CreateHealthHud(Transform parent)
+    {
+        var panel = CreateImage("Health HUD", parent, new Color(0.04f, 0.06f, 0.08f, 0.82f));
+        SetAnchored(panel.rectTransform, new Vector2(0f, 1f), new Vector2(32f, -32f), new Vector2(360f, 104f), new Vector2(0f, 1f));
+
+        var title = CreateText("Health Title", panel.transform, "\u0417\u0434\u043e\u0440\u043e\u0432\u044c\u0435", 22, TextAnchor.MiddleLeft, Color.white);
+        title.fontStyle = FontStyle.Bold;
+        Stretch(title.rectTransform, new Vector2(18f, 54f), new Vector2(18f, 10f));
+
+        var barBack = CreateImage("Health Bar Back", panel.transform, new Color(0f, 0f, 0f, 0.35f));
+        SetAnchored(barBack.rectTransform, new Vector2(0.5f, 0.28f), Vector2.zero, new Vector2(286f, 22f), new Vector2(0.5f, 0.5f));
+
+        healthFill = CreateImage("Health Bar Fill", barBack.transform, new Color(0.16f, 0.86f, 0.38f, 1f));
+        healthFill.type = Image.Type.Filled;
+        healthFill.fillMethod = Image.FillMethod.Horizontal;
+        healthFill.fillOrigin = 0;
+        Stretch(healthFill.rectTransform, Vector2.zero, Vector2.zero);
+
+        healthText = CreateText("Health Value", barBack.transform, "", 18, TextAnchor.MiddleCenter, Color.white);
+        healthText.fontStyle = FontStyle.Bold;
+        Stretch(healthText.rectTransform, Vector2.zero, Vector2.zero);
     }
 
     private void CreateScoreHud(Transform parent)
@@ -838,7 +997,7 @@ public class FinalGameController : MonoBehaviour
     private void CreateWebcamGestureHud(Transform parent)
     {
         var panel = CreateImage("AR Gesture Panel", parent, new Color(0.04f, 0.06f, 0.08f, 0.72f));
-        SetAnchored(panel.rectTransform, new Vector2(0f, 1f), new Vector2(32f, -32f), new Vector2(420f, 118f), new Vector2(0f, 1f));
+        SetAnchored(panel.rectTransform, new Vector2(0f, 1f), new Vector2(32f, -152f), new Vector2(420f, 118f), new Vector2(0f, 1f));
 
         var title = CreateText("AR Gesture Title", panel.transform, "AR управление меню", 22, TextAnchor.MiddleLeft, Color.white);
         title.fontStyle = FontStyle.Bold;
@@ -1000,6 +1159,23 @@ public class FinalGameController : MonoBehaviour
         if (bestScoreText != null)
         {
             bestScoreText.text = "Рекорд: " + highScore;
+        }
+    }
+
+    private void UpdateHealthView()
+    {
+        var safeMaxHealth = Mathf.Max(1, maxHealth);
+        var health01 = Mathf.Clamp01((float)currentHealth / safeMaxHealth);
+
+        if (healthFill != null)
+        {
+            healthFill.fillAmount = health01;
+            healthFill.color = Color.Lerp(new Color(0.9f, 0.14f, 0.12f, 1f), new Color(0.16f, 0.86f, 0.38f, 1f), health01);
+        }
+
+        if (healthText != null)
+        {
+            healthText.text = currentHealth + " / " + safeMaxHealth;
         }
     }
 

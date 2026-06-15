@@ -13,6 +13,12 @@ public class FinalCoinPickup : MonoBehaviour
         gameController = owner;
     }
 
+    public void ResetPickup()
+    {
+        collected = false;
+        gameObject.SetActive(true);
+    }
+
     private void Awake()
     {
         var coinCollider = GetComponent<Collider>();
